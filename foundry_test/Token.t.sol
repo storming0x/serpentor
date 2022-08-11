@@ -12,15 +12,13 @@ contract TokenTest is ExtendedTest {
     Token private token;
 
     function setUp() public {
-        token = Token(
-            vyperDeployer.deployContract("src/test/", "Token")
-        );
+        token = Token(vyperDeployer.deployContract("src/test/", "Token"));
         console.log("address for token: ", address(token));
     }
 
     function testSetup() public {
-       assertNeq(address(token), address(0));
-       assertEq(token.name(), "Test Token");
-       assertEq(token.symbol(), "TEST");
+        assertNeq(address(token), address(0));
+        assertEq(token.name(), "Test Token");
+        assertEq(token.symbol(), "TEST");
     }
 }
