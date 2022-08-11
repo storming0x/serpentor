@@ -1,0 +1,15 @@
+plugins:
+  - name: solidity
+  - name: vyper
+  - name: hardhat
+  - name: infura
+  - name: tokens
+
+contracts_folder: src
+
+default_ecosystem: ethereum
+
+ethereum:
+  default_network: local
+  local:
+    default_provider: hardhat

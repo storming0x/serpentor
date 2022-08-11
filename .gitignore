@@ -1,0 +1,13 @@
+__pycache__
+.env
+.history
+.hypothesis/
+.build/
+reports/
+node_modules
+package-lock.json
+yarn-error.log
+artifacts
+contracts/.cache
+.DS_Store
+.python-version
