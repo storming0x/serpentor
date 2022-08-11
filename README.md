@@ -34,7 +34,7 @@ See [ape quickstart guide](https://docs.apeworx.io/ape/stable/userguides/quickst
 
 Install [foundry](https://github.com/foundry-rs/foundry)
 
-Install Linter dependencies
+Install JS dependencies
 
 ```bash
 npm install
