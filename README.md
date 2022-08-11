@@ -1,6 +1,12 @@
 ## Serpentor
 
-<img src="cobra.png" width="200">
+<p align="center">
+    <img src="cobra.png" width="200">
+</p>
+
+[![Forge tests](https://github.com/storming0x/serpentor/actions/workflows/forge-tests.yml/badge.svg)](https://github.com/storming0x/serpentor/actions/workflows/forge-tests.yml)
+
+[![Python tests](https://github.com/storming0x/serpentor/actions/workflows/ape-tests.yml/badge.svg)](https://github.com/storming0x/serpentor/actions/workflows/ape-tests.yml)
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 

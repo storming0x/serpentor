@@ -4,10 +4,12 @@ __pycache__
 .hypothesis/
 .build/
 reports/
+cache
+out
 node_modules
 package-lock.json
 yarn-error.log
 artifacts
-contracts/.cache
+src/.cache
 .DS_Store
 .python-version
