@@ -9,20 +9,36 @@ A set of smart contracts tools for governance written in vyper
 
 ## Setup
 
-Install ape framework. See [ape quickstart guide](https://docs.apeworx.io/ape/stable/userguides/quickstart.html)
+This project uses [foundry](https://github.com/foundry-rs/foundry) and [apeworx](https://github.com/ApeWorX/ape) to combine both unit test, fuzz tests with integration tests in python.
 
-Hardhat dependencies for running tests
+Install ape framework. 
+
+See [ape quickstart guide](https://docs.apeworx.io/ape/stable/userguides/quickstart.html)
+
+Install [foundry](https://github.com/foundry-rs/foundry)
+
+## Build
 ```bash
-npm install
+forge build
 ```
 
-## Compile
+## Run tests
+```bash
+forge test
+```
+
+## Run tests with traces
+```bash
+forge test -vvv
+```
+
+## Build with ape
 
 ```bash
 ape compile
 ```
 
-## Test
+## Run python tests
 
 ```bash
 ape test
@@ -31,3 +47,8 @@ ape test
 ## Disclaimer
 
 Code has not been audited
+
+## Acknowledgements
+
+- [snekmate](https://github.com/pcaversaccio/snekmate)
+- [vyperDeployer](https://github.com/0xKitsune/Foundry-Vyper/blob/main/lib/utils/VyperDeployer.sol)
