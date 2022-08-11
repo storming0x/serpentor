@@ -1,4 +1,4 @@
-name: Test smart contracts
+name: Forge tests
 
 on: [push, pull_request]
 

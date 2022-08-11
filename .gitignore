@@ -13,3 +13,4 @@ artifacts
 src/.cache
 .DS_Store
 .python-version
+.pytest_cache/
