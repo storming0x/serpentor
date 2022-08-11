@@ -9,7 +9,7 @@ interface _CheatCodes {
 /**
  * @title Vyper Contract Deployer
  * @notice Forked and modified from here:
- * https://github.com/0xKitsune/Foundry-Vyper/blob/main/lib/utils/VyperDeployer.sol
+ * https://github.com/pcaversaccio/snekmate/blob/main/lib/utils/VyperDeployer.sol
  * @dev The Vyper deployer is a pre-built contract that takes a filename
  * and deploys the corresponding Vyper contract, returning the address
  * that the bytecode was deployed to.
@@ -22,16 +22,22 @@ contract VyperDeployer {
     /// @notice Initializes cheat codes in order to use ffi to compile Vyper contracts
     _CheatCodes cheatCodes = _CheatCodes(HEVM_ADDRESS);
 
-    ///@notice Compiles a Vyper contract and returns the address that the contract was deployeod to
-    ///@notice If deployment fails, an error will be thrown
-    ///@param fileName - The file name of the Vyper contract. For example, the file name for "SimpleStore.vy" is "SimpleStore"
-    ///@return deployedAddress - The address that the contract was deployed to
-
-    function deployContract(string memory fileName) public returns (address) {
+     /**
+     * @dev Compiles a Vyper contract and returns the address that the contract
+     * was deployed to. If the deployment fails, an error is thrown.
+     * @param path The directory path of the Vyper contract.
+     * For example, the path of "test" is "src/test/".
+     * @param fileName The file name of the Vyper contract.
+     * For example, the file name for "Token.vy" is "Token".
+     * @return deployedAddress The address that the contract was deployed to.
+     */
+    function deployContract(string memory path, string memory fileName)
+        public
+        returns (address) {
         ///@notice create a list of strings with the commands necessary to compile Vyper contracts
         string[] memory cmds = new string[](2);
         cmds[0] = "vyper";
-        cmds[1] = string.concat("src/", fileName, ".vy");
+        cmds[1] = string.concat(path, fileName, ".vy");
 
         ///@notice compile the Vyper contract and return the bytecode
         bytes memory bytecode = cheatCodes.ffi(cmds);
@@ -52,18 +58,24 @@ contract VyperDeployer {
         return deployedAddress;
     }
 
-    ///@notice Compiles a Vyper contract with constructor arguments and returns the address that the contract was deployeod to
-    ///@notice If deployment fails, an error will be thrown
-    ///@param fileName - The file name of the Vyper contract. For example, the file name for "SimpleStore.vy" is "SimpleStore"
-    ///@return deployedAddress - The address that the contract was deployed to
-    function deployContract(string memory fileName, bytes calldata args)
-        public
-        returns (address)
-    {
+    /**
+     * @dev Compiles a Vyper contract and returns the address that the contract
+     * was deployed to. If the deployment fails, an error is thrown.
+     * @param path The directory path of the Vyper contract.
+     * For example, the path of "test" is "src/test/".
+     * @param fileName The file name of the Vyper contract.
+     * For example, the file name for "Token.vy" is "Token".
+     * @return deployedAddress The address that the contract was deployed to.
+     */
+    function deployContract(
+        string memory path,
+        string memory fileName,
+        bytes calldata args
+    ) public returns (address) {
         ///@notice create a list of strings with the commands necessary to compile Vyper contracts
         string[] memory cmds = new string[](2);
         cmds[0] = "vyper";
-        cmds[1] = string.concat("src/", fileName, ".vy");
+        cmds[1] = string.concat(path, fileName, ".vy");
 
         ///@notice compile the Vyper contract and return the bytecode
         bytes memory _bytecode = cheatCodes.ffi(cmds);
