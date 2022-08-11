@@ -1,4 +1,4 @@
-# @version 0.3.4
+# @version 0.3.6
 from vyper.interfaces import ERC20
 
 implements: ERC20

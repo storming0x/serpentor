@@ -16,6 +16,14 @@ The test environment requires that the `vyper` compiler command can be accessed 
 
 [vyper install instructions](https://vyper.readthedocs.io/en/stable/installing-vyper.html)
 
+As an alternative you can also install [vvm](https://github.com/storming0x/vvm-rs)
+
+and run 
+
+```bash
+vvm install 0.3.6
+```
+
 ## Setup
 
 This project uses [foundry](https://github.com/foundry-rs/foundry) and [apeworx](https://github.com/ApeWorX/ape) to combine both unit test, fuzz tests with integration tests in python.
