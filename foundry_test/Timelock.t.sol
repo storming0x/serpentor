@@ -10,10 +10,16 @@ import {Timelock} from "./interfaces/Timelock.sol";
 contract TimelockTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
     Timelock private timelock;
+    address public king = address(1);
+    uint256 public delay = 2 days;
 
     function setUp() public {
-        timelock = Timelock(vyperDeployer.deployContract("src/", "Timelock"));
+        bytes memory args = abi.encode(king, delay);
+        timelock = Timelock(vyperDeployer.deployContract("src/", "Timelock", args));
         console.log("address for timelock: ", address(timelock));
+
+        // add more labels to make your traces readable
+        vm.label(address(timelock), "Timelock");
     }
 
     function testSetup() public {

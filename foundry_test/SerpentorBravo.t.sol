@@ -10,10 +10,13 @@ import {SerpentorBravo} from "./interfaces/SerpentorBravo.sol";
 contract SerpentorBravoTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
     SerpentorBravo private serpentor;
-
+  
     function setUp() public {
         serpentor = SerpentorBravo(vyperDeployer.deployContract("src/", "SerpentorBravo"));
         console.log("address for gov contract: ", address(serpentor));
+
+        // add more labels to make your traces readable
+        vm.label(address(serpentor), "SerpentorBravo");
     }
 
     function testSetup() public {
