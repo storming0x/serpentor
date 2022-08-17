@@ -162,8 +162,10 @@ def executeTransaction(target: address, amount: uint256, signature: String[METHO
     callData: Bytes[MAX_DATA_LEN] = b""
 
     if len(signature) == 0:
-        callData = callData
+        # @dev use provided data directly
+        callData = data
     else: 
+        # @dev use signature + data
         sig_hash: bytes32 = keccak256(signature)
         func_sig: bytes4 = convert(sig_hash, bytes4)
         callData = _abi_encode(func_sig, data)
