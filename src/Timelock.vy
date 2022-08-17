@@ -8,7 +8,8 @@
     TODO: add notice description
 """
 
-MAX_DATA_LEN: constant(uint256) = 16483
+MAX_DATA_LEN: constant(uint256) = 16608
+CALL_DATA_LEN: constant(uint256) = 16483
 METHOD_SIG_SIZE: constant(uint256) = 1024
 DAY: constant(uint256) = 86400
 GRACE_PERIOD: constant(uint256) = 14 * DAY
@@ -29,7 +30,7 @@ event CancelTransaction:
     target: indexed(address)
     value: uint256
     signature: String[METHOD_SIG_SIZE]
-    data: Bytes[MAX_DATA_LEN]
+    data: Bytes[CALL_DATA_LEN]
     eta: uint256
 
 event ExecuteTransaction:
@@ -37,7 +38,7 @@ event ExecuteTransaction:
     target: indexed(address)
     value: uint256
     signature: String[METHOD_SIG_SIZE]
-    data: Bytes[MAX_DATA_LEN]
+    data: Bytes[CALL_DATA_LEN]
     eta: uint256
 
 event QueueTransaction:
@@ -45,7 +46,7 @@ event QueueTransaction:
     target: indexed(address)
     value: uint256
     signature: String[METHOD_SIG_SIZE]
-    data: Bytes[MAX_DATA_LEN]
+    data: Bytes[CALL_DATA_LEN]
     eta: uint256
 
 admin: public(address)
@@ -110,7 +111,7 @@ def setPendingAdmin(pendingAdmin: address):
     log NewPendingAdmin(pendingAdmin)
 
 @external
-def queuedTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[MAX_DATA_LEN], eta: uint256) -> bytes32:
+def queuedTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32:
     """
     @notice
     @dev
@@ -127,7 +128,7 @@ def queuedTransaction(target: address, amount: uint256, signature: String[METHOD
     return txHash
 
 @external
-def cancelTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[MAX_DATA_LEN], eta: uint256):
+def cancelTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256):
     """
     @notice
     @dev
@@ -141,7 +142,7 @@ def cancelTransaction(target: address, amount: uint256, signature: String[METHOD
     log CancelTransaction(txHash, target, amount, signature, data, eta)
 
 @external
-def executeTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[MAX_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]:
+def executeTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]:
     """
     @notice
     @dev
@@ -161,10 +162,10 @@ def executeTransaction(target: address, amount: uint256, signature: String[METHO
     callData: Bytes[MAX_DATA_LEN] = b""
 
     if len(signature) == 0:
-        callData = data
+        callData = callData
     else: 
         sig_hash: bytes32 = keccak256(signature)
-        func_sig: Bytes[4] = convert(sig_hash, Bytes[4])
+        func_sig: bytes4 = convert(sig_hash, bytes4)
         callData = _abi_encode(func_sig, data)
 
     success: bool = False
