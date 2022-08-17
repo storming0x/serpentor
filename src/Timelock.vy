@@ -161,7 +161,7 @@ def executeTransaction(target: address, amount: uint256, signature: String[METHO
     callData: Bytes[MAX_DATA_LEN] = b""
 
     if len(signature) == 0:
-        callData = callData
+        callData = data
     else: 
         sig_hash: bytes32 = keccak256(signature)
         func_sig: Bytes[4] = convert(sig_hash, Bytes[4])
