@@ -11,6 +11,9 @@ contract TimelockTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
     Timelock private timelock;
     address public king = address(1);
+    uint public constant GRACE_PERIOD = 14 days;
+    uint public constant MINIMUM_DELAY = 2 days;
+    uint public constant MAXIMUM_DELAY = 30 days;
     uint256 public delay = 2 days;
 
     function setUp() public {
@@ -24,5 +27,7 @@ contract TimelockTest is ExtendedTest {
 
     function testSetup() public {
         assertNeq(address(timelock), address(0));
+        assertEq(address(timelock.admin()), king);
+        assertEq(timelock.delay(), delay);
     }
 }
