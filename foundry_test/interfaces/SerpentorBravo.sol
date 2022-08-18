@@ -15,7 +15,7 @@ contract SerpentorBravo {
     address public queen;
 
     /// @notice Pending administrator for this contract
-    address public pendingQueens;
+    address public pendingQueen;
 
     /// @notice The delay before voting on a proposal may take place, once proposed, in blocks
     uint public votingDelay;
