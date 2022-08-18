@@ -38,19 +38,6 @@ interface Timelock:
     def cancelTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256): nonpayable
     def executeTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]: nonpayable
 
-# @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
-quorumVotes: public(uint256)
-# @notice The duration of voting on a proposal, in blocks
-votingPeriod: public(uint256)
-# @notice The delay before voting on a proposal may take place, once proposed, in blocks
-votingDelay: public(uint256)
-proposalThreshold: public(uint256)
-timelock: public(address)
-token: public(address)
-proposalMaxActions: public(uint256)
-# @notice The total number of proposals
-proposalCount: public(uint256)
-
 # @notice Possible states that a proposal may be in
 enum ProposalState:
     PENDING
@@ -106,8 +93,42 @@ struct Proposal:
     # @notice Flag marking whether the proposal has been executed
     executed: bool
 
+# @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
+quorumVotes: public(uint256)
+# @notice The duration of voting on a proposal, in blocks
+votingPeriod: public(uint256)
+# @notice The delay before voting on a proposal may take place, once proposed, in blocks
+votingDelay: public(uint256)
+# @notice The number of votes required in order for a voter to become a proposer
+proposalThreshold: public(uint256)
+# @notice The address of the Timelock contract
+timelock: public(address)
+# @notice The address of the governance token
+token: public(address)
+# @notice Setting for maximum number of allowed actions a proposal can execute
+proposalMaxActions: public(uint256)
+# @notice The total number of proposals
+proposalCount: public(uint256)
+# @notice Initial proposal id set at deployment time
+# @dev for migrating from other gov systems
+initialProposalId: public(uint256)
+# @notice The storage record of all proposals ever proposed
+proposals: public(HashMap[uint256, Proposal])
+# @notice The latest proposal for each proposer
+latestProposalIds: public(HashMap[address, uint256])
+
 #  @notice Receipts of ballots for the entire set of voters, proposal_id -> voter_address -> receipt
 receipts: HashMap[uint256, HashMap[address, Receipt]]
+
+# ///// EVENTS /////
+
+event ProposalCreated:
+    id: uint256
+    proposer: indexed(address)
+    actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]
+    startBlock: uint256
+    endBlock: uint256
+    description: String[MAX_DATA_LEN]
 
 @external
 def __init__(
@@ -116,7 +137,8 @@ def __init__(
     votingPeriod: uint256,
     votingDelay: uint256,
     proposalThreshold: uint256,
-    quorumVotes: uint256
+    quorumVotes: uint256,
+    initialProposalId: uint256
 ):
     """
     @notice
@@ -134,6 +156,7 @@ def __init__(
     self.votingDelay = votingDelay
     self.proposalThreshold = proposalThreshold
     self.quorumVotes = quorumVotes
+    self.initialProposalId = initialProposalId
 
 @external
 def propose(
@@ -152,5 +175,64 @@ def propose(
     assert len(actions) != 0, "!no_actions"
     assert len(actions) <= self.proposalMaxActions, "!too_many_actions"
 
+    latestProposalId: uint256 =  self.latestProposalIds[msg.sender]
+    if latestProposalId != 0:
+        proposersLatestProposalState: ProposalState = self._state(latestProposalId)
+        assert proposersLatestProposalState not in (ProposalState.ACTIVE | ProposalState.PENDING), "!latestPropId_state"
 
-    return 0
+    startBlock: uint256 = block.number + self.votingDelay
+    endBlock: uint256 = startBlock + self.votingPeriod
+
+    self.proposalCount += 1
+
+    newProposal: Proposal = Proposal({
+        id: self.proposalCount,
+        proposer: msg.sender,
+        eta: 0,
+        actions: actions,
+        startBlock: startBlock,
+        endBlock: endBlock,
+        forVotes: 0,
+        againstVotes: 0,
+        abstainVotes: 0,
+        canceled: False,
+        executed: False
+    })
+
+    self.proposals[newProposal.id] = newProposal
+    self.latestProposalIds[newProposal.proposer] = newProposal.id
+
+    log ProposalCreated(newProposal.id, msg.sender, actions, startBlock, endBlock, description)
+
+    return newProposal.id
+
+
+@external
+@view
+def state(proposalId: uint256)  -> ProposalState:
+    return self._state(proposalId)
+
+
+@internal
+@view
+def _state(proposalId: uint256) -> ProposalState:
+    assert self.proposalCount >= proposalId and proposalId > self.initialProposalId, "!proposalId"
+
+    proposal: Proposal = self.proposals[proposalId]
+
+    if proposal.canceled:
+        return ProposalState.CANCELED
+    elif block.number <= proposal.startBlock:
+        return ProposalState.PENDING
+    elif block.number <= proposal.endBlock:
+        return ProposalState.ACTIVE
+    elif proposal.forVotes <= proposal.againstVotes or proposal.forVotes < self.quorumVotes:
+        return ProposalState.DEFEATED
+    elif proposal.eta == 0:
+         return ProposalState.SUCCEEDED
+    elif proposal.executed:
+        return ProposalState.EXECUTED
+    elif block.timestamp >= proposal.eta + Timelock(self.timelock).GRACE_PERIOD():
+        return ProposalState.EXPIRED
+    else:
+        return ProposalState.QUEUED

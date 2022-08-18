@@ -42,7 +42,8 @@ contract SerpentorBravoTest is ExtendedTest {
             VOTING_PERIOD,
             VOTING_DELAY,
             THRESHOLD,
-            QUORUM_VOTES
+            QUORUM_VOTES,
+            0 // initialProposalId
         );
         serpentor = SerpentorBravo(vyperDeployer.deployContract("src/", "SerpentorBravo", serpentorArgs));
         console.log("address for gov contract: ", address(serpentor));
@@ -64,5 +65,6 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(serpentor.votingDelay(), VOTING_DELAY);
         assertEq(serpentor.proposalThreshold(), THRESHOLD);
         assertEq(serpentor.quorumVotes(), QUORUM_VOTES);
+        assertEq(serpentor.initialProposalId(), 0);
     }
 }
