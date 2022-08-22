@@ -16,10 +16,23 @@ GRACE_PERIOD: constant(uint256) = 14 * DAY
 MINIMUM_DELAY: constant(uint256) = 2 * DAY
 MAXIMUM_DELAY: constant(uint256) = 30 * DAY
 
-event Newqueen:
-    newqueen: indexed(address)
+# @notice a single transaction to be executed by the timelock
+struct Transaction:
+    # @notice the target address for calls to be made
+    target: address
+    # @notice The value (i.e. msg.value) to be passed to the calls to be made
+    amount: uint256
+    # @notice The function signature to be called
+    signature: String[METHOD_SIG_SIZE]
+    # @notice The calldata to be passed to the call
+    callData: Bytes[CALL_DATA_LEN]
+    # @notice The estimated time for execution of the trx
+    eta: uint256
 
-event NewPendingqueen:
+event NewQueen:
+    newQueen: indexed(address)
+
+event NewPendingQueen:
     newPendingqueen: indexed(address)
 
 event NewDelay:
@@ -94,10 +107,10 @@ def acceptQueen():
     self.queen = msg.sender
     self.pendingQueen = empty(address)
 
-    log Newqueen(msg.sender)
+    log NewQueen(msg.sender)
 
 @external
-def setPendingqueen(pendingQueen: address):
+def setPendingQueen(pendingQueen: address):
     """
     @notice
        Updates `pendingQueen` value
@@ -108,41 +121,27 @@ def setPendingqueen(pendingQueen: address):
     assert msg.sender == self, "!Timelock"
     self.pendingQueen = pendingQueen
 
-    log NewPendingqueen(pendingQueen)
+    log NewPendingQueen(pendingQueen)
 
 @external
-def queuedTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32:
+def queueTransaction(trx: Transaction) -> bytes32:
     """
     @notice
     @dev
     @param 
     """
     assert msg.sender == self, "!queen"
-    assert eta >= block.timestamp + self.delay, "!eta"
+    assert trx.eta >= block.timestamp + self.delay, "!eta"
 
-    txHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
-    self.queuedTransactions[txHash] = True
+    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
+    self.queuedTransactions[trxHash] = True
 
-    log QueueTransaction(txHash, target, amount, signature, data, eta)
+    log QueueTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
 
-    return txHash
-
-@external
-def cancelTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256):
-    """
-    @notice
-    @dev
-    @param 
-    """
-    assert msg.sender == self, "!queen"
-
-    txHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
-    self.queuedTransactions[txHash] = False
-
-    log CancelTransaction(txHash, target, amount, signature, data, eta)
+    return trxHash
 
 @external
-def executeTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]:
+def cancelTransaction(trx: Transaction):
     """
     @notice
     @dev
@@ -150,39 +149,53 @@ def executeTransaction(target: address, amount: uint256, signature: String[METHO
     """
     assert msg.sender == self, "!queen"
 
-    txHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
-    assert self.queuedTransactions[txHash], "!queued_trx"
-    assert block.timestamp >= eta, "!Timelock"
-    assert block.timestamp <= eta + GRACE_PERIOD, "!staled_trx"
+    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
+    self.queuedTransactions[trxHash] = False
 
-    self.queuedTransactions[txHash] = False
+    log CancelTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
+
+@external
+def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
+    """
+    @notice
+    @dev
+    @param 
+    """
+    assert msg.sender == self, "!queen"
+
+    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
+    assert self.queuedTransactions[trxHash], "!queued_trx"
+    assert block.timestamp >= trx.eta, "!Timelock"
+    assert block.timestamp <= trx.eta + GRACE_PERIOD, "!staled_trx"
+
+    self.queuedTransactions[trxHash] = False
 
     # @dev reference: https://github.com/compound-finance/compound-protocol/blob/a3214f67b73310d547e00fc578e8355911c9d376/contracts/Timelock.sol#L96
     # TODO: check if this is the correct code for vyper based on solidity
     callData: Bytes[MAX_DATA_LEN] = b""
 
-    if len(signature) == 0:
+    if len(trx.signature) == 0:
         # @dev use provided data directly
-        callData = data
+        callData = trx.callData
     else: 
         # @dev use signature + data
-        sig_hash: bytes32 = keccak256(signature)
+        sig_hash: bytes32 = keccak256(trx.signature)
         func_sig: bytes4 = convert(sig_hash, bytes4)
-        callData = _abi_encode(func_sig, data)
+        callData = _abi_encode(func_sig, trx.callData)
 
     success: bool = False
     response: Bytes[32] = b""
 
     success, response = raw_call(
-        target,
-        callData,
+        trx.target,
+        trx.callData,
         max_outsize=32,
-        value=amount,
+        value=trx.amount,
         revert_on_failure=False
     )
 
     assert success, "!trx_revert"
 
-    log ExecuteTransaction(txHash, target, amount, signature, data, eta)
+    log ExecuteTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
 
     return callData

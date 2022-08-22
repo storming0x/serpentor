@@ -28,15 +28,32 @@ DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string
 # @notice The EIP-712 typehash for the ballot struct used by the contract
 BALLOT_TYPEHASH: constant(bytes32) = keccak256("Ballot(uint256 proposalId,uint8 support)")
 
+
+
 # interfaces
+
+# timelock struct
+# @notice a single transaction to be executed by the timelock
+struct Transaction:
+    # @notice the target address for calls to be made
+    target: address
+    # @notice The value (i.e. msg.value) to be passed to the calls to be made
+    amount: uint256
+    # @notice The function signature to be called
+    signature: String[METHOD_SIG_SIZE]
+    # @notice The calldata to be passed to the call
+    callData: Bytes[CALL_DATA_LEN]
+    # @notice The estimated time for execution of the trx
+    eta: uint256
+
 interface Timelock:
     def delay() -> uint256: view
     def GRACE_PERIOD() -> uint256: view
     def acceptQueen(): nonpayable
     def queuedTransactions(hash: bytes32) -> bool: view
-    def queuedTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32: nonpayable
-    def cancelTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256): nonpayable
-    def executeTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]: nonpayable
+    def queueTransaction(trx:Transaction) -> bytes32: nonpayable
+    def cancelTransaction(trx:Transaction): nonpayable
+    def executeTransaction(trx:Transaction) -> Bytes[MAX_DATA_LEN]: nonpayable
 
 # @notice Possible states that a proposal may be in
 enum ProposalState:
@@ -121,7 +138,7 @@ latestProposalIds: public(HashMap[address, uint256])
 receipts: HashMap[uint256, HashMap[address, Receipt]]
 
 # ///// EVENTS /////
-
+# @notice An event emitted when a new proposal is created
 event ProposalCreated:
     id: uint256
     proposer: indexed(address)
@@ -129,6 +146,15 @@ event ProposalCreated:
     startBlock: uint256
     endBlock: uint256
     description: String[MAX_DATA_LEN]
+
+# @notice An event emitted when a proposal has been queued in the Timelock
+event ProposalQueued:
+    id: uint256
+    eta: uint256
+
+# @notice An event emitted when a proposal has been executed in the Timelock
+event ProposalExecuted:
+    id: uint256
 
 @external
 def __init__(
@@ -208,9 +234,66 @@ def propose(
 
 
 @external
+def queue(proposalId: uint256):
+    """
+    @notice Queues a proposal of state succeeded
+    @dev
+    @param proposalId The id of the proposal to queue
+    """
+    assert self._state(proposalId) == ProposalState.SUCCEEDED, "!succeeded"
+    proposal: Proposal = self.proposals[proposalId]
+    eta: uint256 = block.timestamp + Timelock(self.timelock).delay()
+    for action in proposal.actions:
+        self._queueOrRevertInternal(action, eta)    
+    proposal.eta = eta
+    log ProposalQueued(proposalId, eta)
+
+@external
+def execute(proposalId: uint256):
+    """
+    @notice Executes a queued proposal if eta has passed
+    @dev
+    @param proposalId The id of the proposal to execute
+    """
+    assert self._state(proposalId) == ProposalState.QUEUED, "!queued"
+    proposal: Proposal = self.proposals[proposalId]
+    proposal.executed = True
+    for action in proposal.actions:
+        trx: Transaction = self._buildTrx(action, proposal.eta)   
+        Timelock(self.timelock).executeTransaction(trx)
+    
+    log ProposalExecuted(proposalId)
+    
+
+@external
 @view
 def state(proposalId: uint256)  -> ProposalState:
     return self._state(proposalId)
+
+
+@internal
+def _queueOrRevertInternal(action: ProposalAction, eta: uint256):
+    """
+    @notice
+    @dev
+    @param 
+    """
+    trxHash: bytes32 = keccak256(_abi_encode(action.target, action.amount, action.signature, action.callData, eta))
+    assert Timelock(self.timelock).queuedTransactions(trxHash) != True, "!duplicate_trx"
+    timelockTrx: Transaction = self._buildTrx(action, eta)
+    Timelock(self.timelock).queueTransaction(timelockTrx)
+
+@internal
+def _buildTrx(action: ProposalAction, eta: uint256) -> Transaction:
+    timelockTrx: Transaction = Transaction({
+        target: action.target,
+        amount: action.amount,
+        signature: action.signature,
+        callData: action.callData,
+        eta: eta
+    })
+
+    return timelockTrx
 
 
 @internal
