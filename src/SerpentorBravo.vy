@@ -328,6 +328,31 @@ def voteWithReason(proposalId: uint256, support: uint8, reason: String[MAX_DATA_
     log VoteCast(msg.sender, proposalId, support, self._vote(msg.sender, proposalId, support), reason)
 
 @external
+def voteBySig(proposalId: uint256, support: uint8, v: uint8, r: bytes32, s: bytes32):
+    """
+    @notice Cast a vote for a proposal by signature
+    @dev External function that accepts EIP-712 signatures for voting on proposals.
+    """ 
+    domainSeparator: bytes32 = self._domainSeparator()
+    structHash: bytes32 = keccak256(
+        concat(
+            BALLOT_TYPEHASH,
+            convert(proposalId, bytes32),
+            convert(support, bytes32),
+        )
+    )
+    digest: bytes32 = keccak256(
+        concat(
+            b'\x19\x01',
+            domainSeparator,
+            structHash,
+        )
+    )
+    signer: address = ecrecover(digest, convert(v, uint256), convert(r, uint256), convert(s, uint256))
+    assert signer != empty(address), "!signature"
+    log VoteCast(signer, proposalId, support, self._vote(signer, proposalId, support), "")
+
+@external
 @view
 def state(proposalId: uint256)  -> ProposalState:
     return self._state(proposalId)
@@ -379,6 +404,17 @@ def _buildTrx(action: ProposalAction, eta: uint256) -> Transaction:
     })
 
     return timelockTrx
+
+@internal
+def _domainSeparator() -> bytes32:
+    return keccak256(
+        concat(
+            DOMAIN_TYPE_HASH,
+            keccak256(convert(NAME, Bytes[20])),
+            convert(chain.id, bytes32),
+            convert(self, bytes32)
+        )
+    )
 
 @internal
 def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
