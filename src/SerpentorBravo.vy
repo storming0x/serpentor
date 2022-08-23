@@ -133,9 +133,12 @@ initialProposalId: public(uint256)
 proposals: public(HashMap[uint256, Proposal])
 # @notice The latest proposal for each proposer
 latestProposalIds: public(HashMap[address, uint256])
-
+#  @notice Stores the expiration of account whitelist status as a timestamp
+whitelistAccountExpirations: public(HashMap[address, uint256])
 #  @notice Receipts of ballots for the entire set of voters, proposal_id -> voter_address -> receipt
 receipts: HashMap[uint256, HashMap[address, Receipt]]
+
+
 
 # ///// EVENTS /////
 # @notice An event emitted when a new proposal is created
@@ -155,6 +158,24 @@ event ProposalQueued:
 # @notice An event emitted when a proposal has been executed in the Timelock
 event ProposalExecuted:
     id: uint256
+
+# @notice An event emitted when a proposal has been canceled
+event ProposalCanceled:
+    id: uint256
+
+# @notice An event emitted when a vote has been cast on a proposal
+# @param voter The address which casted a vote
+# @param proposalId The proposal id which was voted on
+# @param support Support value for the vote. 0=against, 1=for, 2=abstain
+# @param votes Number of votes which were cast by the voter
+# @param reason The reason given for the vote by the voter
+event VoteCast:
+    voter: indexed(address)
+    proposalId: uint256
+    support: uint8
+    votes: uint256
+    reason: String[MAX_DATA_LEN] 
+
 
 @external
 def __init__(
@@ -263,21 +284,85 @@ def execute(proposalId: uint256):
         Timelock(self.timelock).executeTransaction(trx)
     
     log ProposalExecuted(proposalId)
-    
+
+@external
+def cancel(proposalId: uint256):
+    """
+    @notice Cancels a proposal only if sender is the proposer, or proposer delegates dropped below proposal threshold
+    @param proposalId The id of the proposal to cancel
+    """ 
+    assert self._state(proposalId) != ProposalState.EXECUTED, "!cancel_executed"
+    proposal: Proposal = self.proposals[proposalId]
+    # proposer can cancel
+    proposer: address = proposal.proposer
+    # TODO: implement weight vote checks. Ref: https://github.com/compound-finance/compound-protocol/blob/a3214f67b73310d547e00fc578e8355911c9d376/contracts/Governance/GovernorBravoDelegate.sol#L164
+    # if msg.sender != proposer:
+        # Whitelisted proposers can't be canceled for falling below proposal threshold
+        # if self._isWhitelisted(proposer):
+
+        # else
+
+    proposal.canceled = True
+    for action in proposal.actions:
+        trx: Transaction = self._buildTrx(action, proposal.eta)   
+        Timelock(self.timelock).cancelTransaction(trx)
+
+    log ProposalCanceled(proposalId)
+
+@external
+def vote(proposalId: uint256, support: uint8):
+    """
+    @notice Cast a vote for a proposal
+    @param proposalId The id of the proposal
+    @param support The support value for the vote. 0=against, 1=for, 2=abstain
+    """ 
+    log VoteCast(msg.sender, proposalId, support, self._vote(msg.sender, proposalId, support), "")
+
+@external
+def voteWithReason(proposalId: uint256, support: uint8, reason: String[MAX_DATA_LEN]):
+    """
+    @notice Cast a vote for a proposal with a reason string
+    @param proposalId The id of the proposal
+    @param support The support value for the vote. 0=against, 1=for, 2=abstain
+    """ 
+    log VoteCast(msg.sender, proposalId, support, self._vote(msg.sender, proposalId, support), reason)
 
 @external
 @view
 def state(proposalId: uint256)  -> ProposalState:
     return self._state(proposalId)
 
+@external
+@view
+def isWhitelisted(account: address) -> bool:
+    return self._isWhitelisted(account)
+
+@external
+@view
+def getActions(proposalId: uint256) -> DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]:
+    """
+    @notice Gets actions of a proposal
+    @dev
+    @param proposalId the id of the proposal
+    @return Targets, values, signatures, and calldatas of the proposal actions
+    """
+    proposal: Proposal = self.proposals[proposalId]
+    return proposal.actions
+
+@external
+@view
+def getReceipt(proposalId: uint256, voter: address) -> Receipt:
+    """
+    @notice Gets the receipt for a voter on a given proposal
+    @dev
+    @param proposalId the id of the proposal
+    @param voter The address of the voter
+    @return The voting receipt
+    """
+    return self._getReceipt(proposalId, voter)
 
 @internal
 def _queueOrRevertInternal(action: ProposalAction, eta: uint256):
-    """
-    @notice
-    @dev
-    @param 
-    """
     trxHash: bytes32 = keccak256(_abi_encode(action.target, action.amount, action.signature, action.callData, eta))
     assert Timelock(self.timelock).queuedTransactions(trxHash) != True, "!duplicate_trx"
     timelockTrx: Transaction = self._buildTrx(action, eta)
@@ -294,6 +379,26 @@ def _buildTrx(action: ProposalAction, eta: uint256) -> Transaction:
     })
 
     return timelockTrx
+
+@internal
+def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
+    """
+    @notice Internal function for voting logic
+    @dev
+    @param voter The voter that is casting their vote
+    @param proposalId The id of the proposal to vote on
+    @param support The support value for the vote. 0=against, 1=for, 2=abstain
+    @return The number of votes cast
+    """
+    assert self._state(proposalId) == ProposalState.ACTIVE, "!active"
+    assert support <= 2, "!vote_type" # @dev can we use enums instead?
+    proposal: Proposal = self.proposals[proposalId]
+    receipt: Receipt = self._getReceipt(proposalId, voter)
+    assert receipt.hasVoted == False, "hasVoted"
+    # TODO: port get votes at prior start block
+    # Ref: https://github.com/compound-finance/compound-protocol/blob/a3214f67b73310d547e00fc578e8355911c9d376/contracts/Governance/GovernorBravoDelegate.sol#L276
+    # TODO: implement
+    return 0
 
 
 @internal
@@ -319,3 +424,13 @@ def _state(proposalId: uint256) -> ProposalState:
         return ProposalState.EXPIRED
     else:
         return ProposalState.QUEUED
+
+@internal
+@view
+def _isWhitelisted(account: address) -> bool:
+    return self.whitelistAccountExpirations[account] > block.timestamp
+
+@internal
+@view
+def _getReceipt(proposalId: uint256, voter: address) -> Receipt:
+    return self.receipts[proposalId][voter]
