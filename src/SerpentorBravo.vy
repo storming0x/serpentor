@@ -110,6 +110,13 @@ struct Proposal:
     # @notice Flag marking whether the proposal has been executed
     executed: bool
 
+# @notice empress for this contract
+queen: public(address)
+# @notice pending empress for this contract
+pendingQueen: public(address)
+# @notice guardian role for this contract
+knight: public(address)
+
 # @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
 quorumVotes: public(uint256)
 # @notice The duration of voting on a proposal, in blocks
@@ -176,6 +183,40 @@ event VoteCast:
     votes: uint256
     reason: String[MAX_DATA_LEN] 
 
+# @notice Event emitted when the voting delay is set
+event VotingDelaySet:
+    oldVotingDelay: uint256
+    newVotingDelay: uint256
+
+# @notice Event emitted when the voting period is set
+event VotingPeriodSet:
+    oldVotingPeriod: uint256
+    newVotingPeriod: uint256
+
+# @notice Event emitted when the proposal threshold is set
+event ProposalThresoldSet:
+    oldProposalThreshold: uint256
+    newProposalThreshold: uint256
+
+# @notice Event emitted when Whitelisted account expiration is set
+event WhitelistAccountExpirationSet:
+    account: indexed(address)
+    expiration: uint256
+
+# @notice Event emitted when pendingQueen is set
+event NewPendingQueen:
+    oldPendingQueen: indexed(address)
+    newPendingQueen: indexed(address)
+
+# @notice Event emitted when new queen is set
+event NewQueen:
+    oldQueen: indexed(address)
+    newQueen: indexed(address)
+
+# @notice Event emitted when knight is set
+event NewKnight:
+    oldKnight: indexed(address)
+    newKnight: indexed(address)
 
 @external
 def __init__(
@@ -204,6 +245,7 @@ def __init__(
     self.proposalThreshold = proposalThreshold
     self.quorumVotes = quorumVotes
     self.initialProposalId = initialProposalId
+    self.queen = msg.sender
 
 @external
 def propose(
@@ -353,6 +395,108 @@ def voteBySig(proposalId: uint256, support: uint8, v: uint8, r: bytes32, s: byte
     log VoteCast(signer, proposalId, support, self._vote(signer, proposalId, support), "")
 
 @external
+def setVotingDelay(newVotingDelay: uint256):
+    """
+    @notice Admin function for setting the voting delay
+    @dev
+    @param newVotingDelay new voting delay, in blocks
+    """
+    assert msg.sender == self.queen, "!queen"
+    assert newVotingDelay >= MIN_VOTING_DELAY and newVotingDelay <= MAX_VOTING_DELAY, "!votingDelay"
+    oldVotingDelay: uint256 = self.votingDelay
+    self.votingDelay = newVotingDelay
+
+    log VotingDelaySet(oldVotingDelay, newVotingDelay)
+
+@external
+def setVotingPeriod(newVotingPeriod: uint256):
+    """
+    @notice Admin function for setting the voting period
+    @dev
+    @param newVotingPeriod new voting period, in blocks
+    """
+    assert msg.sender == self.queen, "!queen"
+    assert newVotingPeriod >= MIN_VOTING_PERIOD and newVotingPeriod <= MAX_VOTING_PERIOD, "!votingPeriod"
+    oldVotingPeriod: uint256 = self.votingPeriod
+    self.votingPeriod = newVotingPeriod
+
+    log VotingPeriodSet(oldVotingPeriod, newVotingPeriod)
+
+@external
+def setProposalThreshold(newProposalThreshold: uint256):
+    """
+    @notice Admin function for setting the proposal threshold
+    @dev
+    @param newProposalThreshold must be in required range
+    """
+    assert msg.sender == self, "!queen"
+    assert newProposalThreshold >= MIN_PROPOSAL_THRESHOLD and newProposalThreshold <= MAX_PROPOSAL_THRESHOLD, "!threshold"
+    oldProposalThreshold: uint256 = self.proposalThreshold
+    self.proposalThreshold = newProposalThreshold
+
+    log ProposalThresoldSet(oldProposalThreshold, newProposalThreshold)
+
+@external
+def setWhitelistAccountExpiration(account: address, expiration: uint256):
+    """
+    @notice Admin function for setting the whitelist expiration as a timestamp for an account. Whitelist status allows accounts to propose without meeting threshold
+    @dev
+    @param account Account address to set whitelist expiration for
+    @param expiration Expiration for account whitelist status as timestamp (if now < expiration, whitelisted)
+    """
+
+    assert msg.sender == self.queen or msg.sender == self.knight, "!access"
+    self.whitelistAccountExpirations[account] = expiration
+
+    log WhitelistAccountExpirationSet(account, expiration)
+
+@external
+def setPendingQueen(newPendingQueen: address):
+    """
+    @notice Begins transfer of crown and governor rights. The new queen must call `acceptThrone`
+    @dev Admin function to begin exchange of queen. The newPendingQueen must call `acceptThrone` to finalize the transfer.
+    @param newPendingQueen New pending queen.
+    """
+    assert msg.sender == self.queen, "!queen"
+    oldPendingQueen: address = self.pendingQueen
+    self.pendingQueen = newPendingQueen
+
+    log NewPendingQueen(oldPendingQueen, newPendingQueen)
+
+@external
+def acceptThone():
+    """
+    @notice Accepts transfer of crown and governor rights
+    @dev msg.sender must be pendingQueen
+    """
+    assert msg.sender == self.pendingQueen, "!pendingQueen"
+    # save values for events
+    oldQueen: address = self.queen
+    oldPendingQueen: address = self.pendingQueen
+    # new ruler
+    self.queen = self.pendingQueen
+    # clean up
+    self.pendingQueen = empty(address)
+
+    log NewQueen(oldQueen, self.queen)
+    log NewPendingQueen(oldPendingQueen, empty(address))
+
+
+
+@external
+def setKnight(newKnight: address):
+    """
+    @notice Admin function for setting the knight for this contract
+    @dev
+    @param knight Account configured to be the knight, set to 0x0 to remove knight
+    """
+    assert msg.sender == self.queen, "!queen"
+    oldKnight: address = self.knight
+    self.knight = newKnight
+
+    log NewKnight(oldKnight, newKnight)
+
+@external
 @view
 def state(proposalId: uint256)  -> ProposalState:
     return self._state(proposalId)
@@ -435,7 +579,6 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     # Ref: https://github.com/compound-finance/compound-protocol/blob/a3214f67b73310d547e00fc578e8355911c9d376/contracts/Governance/GovernorBravoDelegate.sol#L276
     # TODO: implement
     return 0
-
 
 @internal
 @view
