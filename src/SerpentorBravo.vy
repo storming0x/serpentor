@@ -236,7 +236,7 @@ def __init__(
     @notice
         Initializes SerpentorBravo contract
     @dev contract supports counter set of initialProposalId to allow migrations
-    @param timelock_ The address of the Timelock contract
+    @param timelock The address of the Timelock contract
     @param token The address of the governance token
     @param votingPeriod The initial voting period
     @param votingDelay The initial voting delay
