@@ -127,8 +127,9 @@ def setPendingQueen(pendingQueen: address):
 def queueTransaction(trx: Transaction) -> bytes32:
     """
     @notice
+        adds transaction to execution queue
     @dev
-    @param 
+    @param trx Transaction to queue
     """
     assert msg.sender == self, "!queen"
     assert trx.eta >= block.timestamp + self.delay, "!eta"
@@ -144,8 +145,9 @@ def queueTransaction(trx: Transaction) -> bytes32:
 def cancelTransaction(trx: Transaction):
     """
     @notice
+        cancels a queued transaction
     @dev
-    @param 
+    @param trx Transaction to cancel
     """
     assert msg.sender == self, "!queen"
 
@@ -158,8 +160,9 @@ def cancelTransaction(trx: Transaction):
 def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
     """
     @notice
+        executes a queued transaction
     @dev
-    @param 
+    @param trx Transaction to execute
     """
     assert msg.sender == self, "!queen"
 
