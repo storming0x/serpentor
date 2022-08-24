@@ -21,7 +21,7 @@ contract TimelockTest is ExtendedTest {
         timelock = Timelock(vyperDeployer.deployContract("src/", "Timelock", args));
         console.log("address for timelock: ", address(timelock));
 
-        // add more labels to make your traces readable
+        // vm traces
         vm.label(address(timelock), "Timelock");
     }
 

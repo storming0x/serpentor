@@ -12,13 +12,10 @@ pragma solidity ^0.8.16;
 contract SerpentorBravo {
 
      /// @notice Administrator for this contract
-    address public admin;
+    address public queen;
 
     /// @notice Pending administrator for this contract
-    address public pendingAdmin;
-
-    /// @notice Active brains of Governor
-    address public implementation;
+    address public pendingQueen;
 
     /// @notice The delay before voting on a proposal may take place, once proposed, in blocks
     uint public votingDelay;
@@ -35,6 +32,9 @@ contract SerpentorBravo {
     /// @notice The total number of proposals
     uint public proposalCount;
 
+    /// @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
+    uint public quorumVotes;
+
     /// @notice The address of the Protocol Timelock
     Timelock public timelock;
 
@@ -46,13 +46,14 @@ contract SerpentorBravo {
 
     /// @notice The latest proposal for each proposer
     mapping (address => uint) public latestProposalIds;
+    
 
 
     struct Proposal {
         /// @notice Unique id for looking up a proposal
         uint id;
 
-        /// @notice Creator of the proposal
+     
         address proposer;
 
         /// @notice The timestamp that the proposal will be available for execution, set once the vote succeeds
