@@ -234,8 +234,15 @@ def __init__(
 ):
     """
     @notice
-    @dev
-    @param 
+        Initializes SerpentorBravo contract
+    @dev contract supports counter set of initialProposalId to allow migrations
+    @param timelock_ The address of the Timelock contract
+    @param token The address of the governance token
+    @param votingPeriod The initial voting period
+    @param votingDelay The initial voting delay
+    @param proposalThreshold The initial proposal threshold
+    @param quorumVotes The initial quorum voting setting
+    @param initialProposalId The initialProposalId to start the counter
     """
     assert timelock != empty(address), "!timelock"
     assert token != empty(address), "!token"
@@ -258,8 +265,11 @@ def propose(
 ) -> uint256:
     """
     @notice
+        Function used to propose a new proposal. Sender must have voting power above the proposal threshold
     @dev
-    @param 
+    @param actions Array of ProposalAction struct with target, value, signature and calldata for executing
+    @param description String description of the proposal
+    @return Proposal id of new proposal
     """
     # check voting power or whitelist access
     assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
@@ -304,7 +314,6 @@ def propose(
 def queue(proposalId: uint256):
     """
     @notice Queues a proposal of state succeeded
-    @dev
     @param proposalId The id of the proposal to queue
     """
     assert self._state(proposalId) == ProposalState.SUCCEEDED, "!succeeded"
@@ -319,7 +328,6 @@ def queue(proposalId: uint256):
 def execute(proposalId: uint256):
     """
     @notice Executes a queued proposal if eta has passed
-    @dev
     @param proposalId The id of the proposal to execute
     """
     assert self._state(proposalId) == ProposalState.QUEUED, "!queued"
