@@ -266,7 +266,6 @@ def propose(
     """
     @notice
         Function used to propose a new proposal. Sender must have voting power above the proposal threshold
-    @dev
     @param actions Array of ProposalAction struct with target, value, signature and calldata for executing
     @param description String description of the proposal
     @return Proposal id of new proposal
@@ -411,7 +410,6 @@ def voteBySig(proposalId: uint256, support: uint8, v: uint8, r: bytes32, s: byte
 def setVotingDelay(newVotingDelay: uint256):
     """
     @notice Admin function for setting the voting delay
-    @dev
     @param newVotingDelay new voting delay, in blocks
     """
     assert msg.sender == self.queen, "!queen"
@@ -425,7 +423,6 @@ def setVotingDelay(newVotingDelay: uint256):
 def setVotingPeriod(newVotingPeriod: uint256):
     """
     @notice Admin function for setting the voting period
-    @dev
     @param newVotingPeriod new voting period, in blocks
     """
     assert msg.sender == self.queen, "!queen"
@@ -439,7 +436,6 @@ def setVotingPeriod(newVotingPeriod: uint256):
 def setProposalThreshold(newProposalThreshold: uint256):
     """
     @notice Admin function for setting the proposal threshold
-    @dev
     @param newProposalThreshold must be in required range
     """
     assert msg.sender == self, "!queen"
@@ -453,7 +449,6 @@ def setProposalThreshold(newProposalThreshold: uint256):
 def setWhitelistAccountExpiration(account: address, expiration: uint256):
     """
     @notice Admin function for setting the whitelist expiration as a timestamp for an account. Whitelist status allows accounts to propose without meeting threshold
-    @dev
     @param account Account address to set whitelist expiration for
     @param expiration Expiration for account whitelist status as timestamp (if now < expiration, whitelisted)
     """
@@ -500,7 +495,6 @@ def acceptThone():
 def setKnight(newKnight: address):
     """
     @notice Admin function for setting the knight for this contract
-    @dev
     @param knight Account configured to be the knight, set to 0x0 to remove knight
     """
     assert msg.sender == self.queen, "!queen"
@@ -524,7 +518,6 @@ def isWhitelisted(account: address) -> bool:
 def getActions(proposalId: uint256) -> DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]:
     """
     @notice Gets actions of a proposal
-    @dev
     @param proposalId the id of the proposal
     @return Targets, values, signatures, and calldatas of the proposal actions
     """
@@ -536,7 +529,6 @@ def getActions(proposalId: uint256) -> DynArray[ProposalAction, MAX_POSSIBLE_OPE
 def getReceipt(proposalId: uint256, voter: address) -> Receipt:
     """
     @notice Gets the receipt for a voter on a given proposal
-    @dev
     @param proposalId the id of the proposal
     @param voter The address of the voter
     @return The voting receipt
@@ -577,7 +569,6 @@ def _domainSeparator() -> bytes32:
 def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     """
     @notice Internal function for voting logic
-    @dev
     @param voter The voter that is casting their vote
     @param proposalId The id of the proposal to vote on
     @param support The support value for the vote. 0=against, 1=for, 2=abstain
