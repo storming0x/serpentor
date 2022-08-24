@@ -495,7 +495,7 @@ def acceptThone():
 def setKnight(newKnight: address):
     """
     @notice Admin function for setting the knight for this contract
-    @param knight Account configured to be the knight, set to 0x0 to remove knight
+    @param newKnight Account configured to be the knight, set to 0x0 to remove knight
     """
     assert msg.sender == self.queen, "!queen"
     oldKnight: address = self.knight
