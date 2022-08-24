@@ -55,6 +55,10 @@ interface Timelock:
     def cancelTransaction(trx:Transaction): nonpayable
     def executeTransaction(trx:Transaction) -> Bytes[MAX_DATA_LEN]: nonpayable
 
+# @dev Comp compatible interface to get Voting weight of account at block number. Some tokens implement 'balanceOfAt' but this call can be adapted to integrate with 'balanceOfAt'
+interface GovToken:
+    def getPriorVotes(account: address, blockNumber: uint256) -> uint256:view
+
 # @notice Possible states that a proposal may be in
 enum ProposalState:
     PENDING
@@ -230,8 +234,15 @@ def __init__(
 ):
     """
     @notice
-    @dev
-    @param 
+        Initializes SerpentorBravo contract
+    @dev contract supports counter set of initialProposalId to allow migrations
+    @param timelock The address of the Timelock contract
+    @param token The address of the governance token
+    @param votingPeriod The initial voting period
+    @param votingDelay The initial voting delay
+    @param proposalThreshold The initial proposal threshold
+    @param quorumVotes The initial quorum voting setting
+    @param initialProposalId The initialProposalId to start the counter
     """
     assert timelock != empty(address), "!timelock"
     assert token != empty(address), "!token"
@@ -254,12 +265,14 @@ def propose(
 ) -> uint256:
     """
     @notice
-    @dev
-    @param 
+        Function used to propose a new proposal. Sender must have voting power above the proposal threshold
+    @param actions Array of ProposalAction struct with target, value, signature and calldata for executing
+    @param description String description of the proposal
+    @return Proposal id of new proposal
     """
-    # TODO: check msg.sender has voting power in token to add a proposal
-    # // Allow addresses above proposal threshold and whitelisted addresses to propose
-    # require(comp.getPriorVotes(msg.sender, sub256(block.number, 1)) > proposalThreshold || isWhitelisted(msg.sender), "proposer votes below proposal threshold");
+    # check voting power or whitelist access
+    assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
+
 
     assert len(actions) != 0, "!no_actions"
     assert len(actions) <= self.proposalMaxActions, "!too_many_actions"
@@ -300,7 +313,6 @@ def propose(
 def queue(proposalId: uint256):
     """
     @notice Queues a proposal of state succeeded
-    @dev
     @param proposalId The id of the proposal to queue
     """
     assert self._state(proposalId) == ProposalState.SUCCEEDED, "!succeeded"
@@ -315,7 +327,6 @@ def queue(proposalId: uint256):
 def execute(proposalId: uint256):
     """
     @notice Executes a queued proposal if eta has passed
-    @dev
     @param proposalId The id of the proposal to execute
     """
     assert self._state(proposalId) == ProposalState.QUEUED, "!queued"
@@ -337,12 +348,13 @@ def cancel(proposalId: uint256):
     proposal: Proposal = self.proposals[proposalId]
     # proposer can cancel
     proposer: address = proposal.proposer
-    # TODO: implement weight vote checks. Ref: https://github.com/compound-finance/compound-protocol/blob/a3214f67b73310d547e00fc578e8355911c9d376/contracts/Governance/GovernorBravoDelegate.sol#L164
-    # if msg.sender != proposer:
-        # Whitelisted proposers can't be canceled for falling below proposal threshold
-        # if self._isWhitelisted(proposer):
 
-        # else
+    if msg.sender != proposer:
+        # Whitelisted proposers can't be canceled for falling below proposal threshold unless msg.sender is knight
+        if self._isWhitelisted(proposer):
+            assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) < self.proposalThreshold and msg.sender == self.knight, "!whitelisted_proposer"
+        else:
+            assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) < self.proposalThreshold, "!threshold"
 
     proposal.canceled = True
     for action in proposal.actions:
@@ -398,7 +410,6 @@ def voteBySig(proposalId: uint256, support: uint8, v: uint8, r: bytes32, s: byte
 def setVotingDelay(newVotingDelay: uint256):
     """
     @notice Admin function for setting the voting delay
-    @dev
     @param newVotingDelay new voting delay, in blocks
     """
     assert msg.sender == self.queen, "!queen"
@@ -412,7 +423,6 @@ def setVotingDelay(newVotingDelay: uint256):
 def setVotingPeriod(newVotingPeriod: uint256):
     """
     @notice Admin function for setting the voting period
-    @dev
     @param newVotingPeriod new voting period, in blocks
     """
     assert msg.sender == self.queen, "!queen"
@@ -426,7 +436,6 @@ def setVotingPeriod(newVotingPeriod: uint256):
 def setProposalThreshold(newProposalThreshold: uint256):
     """
     @notice Admin function for setting the proposal threshold
-    @dev
     @param newProposalThreshold must be in required range
     """
     assert msg.sender == self, "!queen"
@@ -440,7 +449,6 @@ def setProposalThreshold(newProposalThreshold: uint256):
 def setWhitelistAccountExpiration(account: address, expiration: uint256):
     """
     @notice Admin function for setting the whitelist expiration as a timestamp for an account. Whitelist status allows accounts to propose without meeting threshold
-    @dev
     @param account Account address to set whitelist expiration for
     @param expiration Expiration for account whitelist status as timestamp (if now < expiration, whitelisted)
     """
@@ -487,8 +495,7 @@ def acceptThone():
 def setKnight(newKnight: address):
     """
     @notice Admin function for setting the knight for this contract
-    @dev
-    @param knight Account configured to be the knight, set to 0x0 to remove knight
+    @param newKnight Account configured to be the knight, set to 0x0 to remove knight
     """
     assert msg.sender == self.queen, "!queen"
     oldKnight: address = self.knight
@@ -511,7 +518,6 @@ def isWhitelisted(account: address) -> bool:
 def getActions(proposalId: uint256) -> DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]:
     """
     @notice Gets actions of a proposal
-    @dev
     @param proposalId the id of the proposal
     @return Targets, values, signatures, and calldatas of the proposal actions
     """
@@ -523,7 +529,6 @@ def getActions(proposalId: uint256) -> DynArray[ProposalAction, MAX_POSSIBLE_OPE
 def getReceipt(proposalId: uint256, voter: address) -> Receipt:
     """
     @notice Gets the receipt for a voter on a given proposal
-    @dev
     @param proposalId the id of the proposal
     @param voter The address of the voter
     @return The voting receipt
@@ -564,7 +569,6 @@ def _domainSeparator() -> bytes32:
 def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     """
     @notice Internal function for voting logic
-    @dev
     @param voter The voter that is casting their vote
     @param proposalId The id of the proposal to vote on
     @param support The support value for the vote. 0=against, 1=for, 2=abstain
@@ -575,10 +579,21 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     proposal: Proposal = self.proposals[proposalId]
     receipt: Receipt = self._getReceipt(proposalId, voter)
     assert receipt.hasVoted == False, "hasVoted"
-    # TODO: port get votes at prior start block
-    # Ref: https://github.com/compound-finance/compound-protocol/blob/a3214f67b73310d547e00fc578e8355911c9d376/contracts/Governance/GovernorBravoDelegate.sol#L276
-    # TODO: implement
-    return 0
+    # @dev use min of current block and proposal startBlock instead ?
+    votes:uint256 = GovToken(self.token).getPriorVotes(msg.sender, proposal.startBlock)
+    
+    if support == 0:
+        proposal.againstVotes += votes
+    elif support == 1:
+        proposal.forVotes += votes
+    elif support == 2:
+        proposal.abstainVotes += votes
+
+    receipt.hasVoted = True
+    receipt.support = support
+    receipt.votes = votes
+
+    return votes
 
 @internal
 @view

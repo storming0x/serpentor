@@ -71,7 +71,7 @@ queuedTransactions: public(HashMap[bytes32,  bool])
 @external
 def __init__(queen: address, delay: uint256):
     """
-    @dev Deploys the timelock with initial values
+    @notice Deploys the timelock with initial values
     @param queen The contract that rules over the timelock
     @param delay The delay for timelock
     """
@@ -86,7 +86,6 @@ def setDelay(delay: uint256):
     """
     @notice
         Updates delay to new value
-    @dev
     @param delay The delay for timelock
     """
     assert msg.sender == self, "!Timelock"
@@ -115,7 +114,6 @@ def setPendingQueen(pendingQueen: address):
     @notice
        Updates `pendingQueen` value
        msg.sender must be this contract
-    @dev
     @param pendingQueen The proposed new queen for the contract
     """
     assert msg.sender == self, "!Timelock"
@@ -127,8 +125,8 @@ def setPendingQueen(pendingQueen: address):
 def queueTransaction(trx: Transaction) -> bytes32:
     """
     @notice
-    @dev
-    @param 
+        adds transaction to execution queue
+    @param trx Transaction to queue
     """
     assert msg.sender == self, "!queen"
     assert trx.eta >= block.timestamp + self.delay, "!eta"
@@ -144,8 +142,8 @@ def queueTransaction(trx: Transaction) -> bytes32:
 def cancelTransaction(trx: Transaction):
     """
     @notice
-    @dev
-    @param 
+        cancels a queued transaction
+    @param trx Transaction to cancel
     """
     assert msg.sender == self, "!queen"
 
@@ -158,8 +156,8 @@ def cancelTransaction(trx: Transaction):
 def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
     """
     @notice
-    @dev
-    @param 
+        executes a queued transaction
+    @param trx Transaction to execute
     """
     assert msg.sender == self, "!queen"
 
