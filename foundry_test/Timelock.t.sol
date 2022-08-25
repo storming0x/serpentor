@@ -5,7 +5,7 @@ import {ExtendedTest} from "./utils/ExtendedTest.sol";
 import {VyperDeployer} from "../lib/utils/VyperDeployer.sol";
 
 import {console} from "forge-std/console.sol";
-import {Timelock} from "./interfaces/Timelock.sol";
+import {Timelock, Transaction} from "./interfaces/Timelock.sol";
 
 contract TimelockTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
@@ -19,6 +19,7 @@ contract TimelockTest is ExtendedTest {
     // events
 
     event NewDelay(uint256 newDelay);
+    event NewQueen(address indexed newQueen);
 
     function setUp() public {
         bytes memory args = abi.encode(queen, delay);
@@ -72,6 +73,77 @@ contract TimelockTest is ExtendedTest {
         vm.prank(address(timelock));
         // delay minimum in contract is 2 days
         timelock.setDelay(31 days);
+    }
+
+    function testRandomAcctCannotSetNewQueen() public {
+        // setup
+        vm.expectRevert(bytes("!Timelock"));
+        // execute
+        vm.prank(address(0xABCD));
+        timelock.setPendingQueen(address(0xABCD));
+    }
+
+    function testRandomAcctCannotTakeOverThrone() public {
+        // setup
+        vm.expectRevert(bytes("!pendingQueen"));
+        // execute
+        vm.prank(address(0xABCD));
+        timelock.acceptThrone();
+    }
+
+    function testOnlyPendingQueenCanAcceptThrone() public {
+        // setup
+        address futureQueen = address(0xBEEF);
+        // setup pendingQueen
+        vm.prank(address(timelock));
+        timelock.setPendingQueen(futureQueen);
+        assertEq(timelock.pendingQueen(), futureQueen);
+        //setup for event checks
+        vm.expectEmit(true, false, false, false);
+        emit NewQueen(futureQueen);
+
+        // execute
+        vm.prank(futureQueen);
+        timelock.acceptThrone();
+
+        // asserts
+        assertEq(timelock.queen(), futureQueen);
+        assertEq(timelock.pendingQueen(), address(0));
+    } 
+
+    function testRandomAcctCannotQueueTrx() public {
+        // setup
+        vm.expectRevert(bytes("!queen"));
+
+        Transaction memory emptyTrx = Transaction({
+            target: address(timelock),
+            amount: 0,
+            eta: block.timestamp + 10 days,
+            signature: "",
+            callData: ""
+        });
+
+        // execute
+        vm.prank(address(0xABCD));
+        timelock.queueTransaction(emptyTrx);
+    }
+
+    function testQueueTrxEtaCannotBeInvalid() public {
+        // setup
+        vm.expectRevert(bytes("!eta"));
+    
+        uint256 badEta = block.timestamp;
+        Transaction memory emptyTrx = Transaction({
+            target: address(timelock),
+            amount: 0,
+            eta: badEta,
+            signature: "",
+            callData: ""
+        });
+
+        // execute
+        vm.prank(address(queen));
+        timelock.queueTransaction(emptyTrx);
     }
 
 }
