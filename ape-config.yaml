@@ -5,6 +5,16 @@ plugins:
   - name: infura
   - name: tokens
 
+# require OpenZepplin Contracts
+dependencies:
+  - name: openzeppelin
+    github: OpenZeppelin/openzeppelin-contracts
+    version: 4.4.2
+
+solidity:
+  import_remapping:
+    - "@openzeppelin=openzeppelin/v4.4.2/contracts"
+
 contracts_folder: src
 
 default_ecosystem: ethereum

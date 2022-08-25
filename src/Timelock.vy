@@ -22,12 +22,13 @@ struct Transaction:
     target: address
     # @notice The value (i.e. msg.value) to be passed to the calls to be made
     amount: uint256
+    # @notice The estimated time for execution of the trx
+    eta: uint256
     # @notice The function signature to be called
     signature: String[METHOD_SIG_SIZE]
     # @notice The calldata to be passed to the call
     callData: Bytes[CALL_DATA_LEN]
-    # @notice The estimated time for execution of the trx
-    eta: uint256
+
 
 event NewQueen:
     newQueen: indexed(address)
@@ -36,7 +37,7 @@ event NewPendingQueen:
     newPendingqueen: indexed(address)
 
 event NewDelay:
-    newDelay: indexed(uint256)
+    newDelay: uint256
 
 event CancelTransaction:
     txHash: indexed(bytes32)
@@ -96,7 +97,7 @@ def setDelay(delay: uint256):
     log NewDelay(delay)
 
 @external
-def acceptQueen():
+def acceptThrone():
     """
     @notice
         updates `pendingQueen` to queen.
@@ -128,7 +129,7 @@ def queueTransaction(trx: Transaction) -> bytes32:
         adds transaction to execution queue
     @param trx Transaction to queue
     """
-    assert msg.sender == self, "!queen"
+    assert msg.sender == self.queen, "!queen"
     assert trx.eta >= block.timestamp + self.delay, "!eta"
 
     trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
@@ -145,7 +146,7 @@ def cancelTransaction(trx: Transaction):
         cancels a queued transaction
     @param trx Transaction to cancel
     """
-    assert msg.sender == self, "!queen"
+    assert msg.sender == self.queen, "!queen"
 
     trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
     self.queuedTransactions[trxHash] = False
@@ -159,11 +160,11 @@ def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
         executes a queued transaction
     @param trx Transaction to execute
     """
-    assert msg.sender == self, "!queen"
+    assert msg.sender == self.queen, "!queen"
 
     trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
     assert self.queuedTransactions[trxHash], "!queued_trx"
-    assert block.timestamp >= trx.eta, "!Timelock"
+    assert block.timestamp >= trx.eta, "!eta"
     assert block.timestamp <= trx.eta + GRACE_PERIOD, "!staled_trx"
 
     self.queuedTransactions[trxHash] = False
@@ -197,3 +198,9 @@ def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
     log ExecuteTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
 
     return callData
+
+
+@external
+@view
+def GRACE_PERIOD() -> uint256:
+    return GRACE_PERIOD
