@@ -57,6 +57,7 @@ forge test
 ```bash
 forge test -vvv
 ```
+**Recommendation**: for faster test times install [vvm-rs](https://github.com/storming0x/vvm-rs). This will add a caching layer to the vyper compiler that improves test times with forge. E.g 32s-> 52ms in local benchmarks
 
 ## Build with ape
 
