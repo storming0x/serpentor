@@ -21,6 +21,8 @@ contract TimelockTest is ExtendedTest {
     event NewDelay(uint256 newDelay);
     event NewQueen(address indexed newQueen);
     event QueueTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
+    event CancelTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
+    event ExecuteTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
 
     function setUp() public {
         bytes memory args = abi.encode(queen, delay);
@@ -149,21 +151,22 @@ contract TimelockTest is ExtendedTest {
 
     function testShouldQueueTrx() public {
         // setup
+        // setup
+        uint256 newDelay = 5 days;
         uint256 eta = block.timestamp + delay + 2 days;
         address target = address(timelock);
-        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, address(0xBEEF));
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
         uint256 amount = 0;
         string memory signature = "";
-
-        Transaction memory testTrx = Transaction({
-            target: target,
-            amount: amount,
-            eta: eta,
-            signature: signature,
-            callData: callData
-        });
-
-        bytes32 expectedTrxHash = keccak256(abi.encode(target, amount, signature, callData, eta));
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
         //setup for event checks
         vm.expectEmit(true, true, false, false);
         emit QueueTransaction(expectedTrxHash, target, amount, signature, callData, eta);
@@ -174,6 +177,258 @@ contract TimelockTest is ExtendedTest {
         // asserts
         assertEq(expectedTrxHash, trxHash);
         assertTrue(timelock.queuedTransactions(trxHash));
+    }
+
+    function testRandomAcctCannotCancelQueueTrx() public {
+        // setup
+        vm.expectRevert(bytes("!queen"));
+
+        Transaction memory emptyTrx = Transaction({
+            target: address(timelock),
+            amount: 0,
+            eta: block.timestamp + 10 days,
+            signature: "",
+            callData: ""
+        });
+
+        // execute
+        vm.prank(address(0xABCD));
+        timelock.cancelTransaction(emptyTrx);
+    }
+
+     function testShouldCancelQueuedTrx() public {
+        // setup
+        uint256 newDelay = 5 days;
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
+        uint256 amount = 0;
+        string memory signature = "";
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+
+        //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit CancelTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        vm.prank(address(queen));
+        timelock.cancelTransaction(testTrx);
+
+        // asserts
+        assertFalse(timelock.queuedTransactions(trxHash));
+    }
+
+    function testRandomAcctCantExecQueuedTrx() public {
+        // setup
+        vm.expectRevert(bytes("!queen"));
+
+        Transaction memory emptyTrx = Transaction({
+            target: address(timelock),
+            amount: 0,
+            eta: block.timestamp + 10 days,
+            signature: "",
+            callData: ""
+        });
+
+        // execute
+        vm.prank(address(0xABCD));
+        timelock.cancelTransaction(emptyTrx);
+    }
+
+    function testRandomAcctCannotExecQueuedTrx() public {
+        // setup
+        uint256 newDelay = 5 days;
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
+        uint256 amount = 0;
+        string memory signature = "";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+
+        vm.expectRevert(bytes("!queen"));
+        // execute
+        vm.prank(address(0xABCD));
+        timelock.executeTransaction(testTrx);
+    }
+
+    function testCannotExecNonExistingTrx() public {
+        // setup
+         // setup
+        uint256 newDelay = 5 days;
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
+        uint256 amount = 0;
+        string memory signature = "";
+
+        Transaction memory queuedTransaction;
+        bytes32 expectedTrxHash;
+        (queuedTransaction, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(queuedTransaction);
+        assertTrue(timelock.queuedTransactions(trxHash));
+
+        Transaction memory wrongTrx;
+        bytes32 wrongTrxHash;
+        (wrongTrx, wrongTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            "",
+            eta
+        );
+
+        vm.expectRevert(bytes("!queued_trx"));
+        // execute
+        vm.prank(address(queen));
+        timelock.executeTransaction(wrongTrx);
+    }
+
+    function testCannotExecQueuedTrxBeforeETA() public {
+        // setup
+        uint256 newDelay = 5 days;
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
+        uint256 amount = 0;
+        string memory signature = "";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+
+        skip(2 days); // short of ETA
+        vm.expectRevert(bytes("!eta"));
+        // execute
+        vm.prank(address(queen));
+        timelock.executeTransaction(testTrx);
+    }
+
+    function testCannotExecQueuedTrxAfterGracePeriod() public {
+        // setup
+        uint256 newDelay = 5 days;
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
+        uint256 amount = 0;
+        string memory signature = "";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+        uint256 gracePeriod = timelock.GRACE_PERIOD();
+
+        skip(eta + gracePeriod + 1); // 1 pass eta grace period
+        vm.expectRevert(bytes("!staled_trx"));
+        // execute
+        vm.prank(address(queen));
+        timelock.executeTransaction(testTrx);
+    }
+
+
+    function testShouldExecQueuedTrxCorrectly() public {
+        // setup
+        uint256 newDelay = 5 days;
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
+        uint256 amount = 0;
+        string memory signature = "";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+        uint256 gracePeriod = timelock.GRACE_PERIOD();
+        skip(eta + 1); // 1 pass eta
+         //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        vm.prank(address(queen));
+        bytes memory executedCalldata = timelock.executeTransaction(testTrx);
+
+        // asserts
+        assertEq(executedCalldata, callData);
+        assertEq(timelock.delay(), newDelay);
+    }
+
+
+    function _getTransactionAndHash(
+        address target, 
+        uint256 amount, 
+        string memory signature, 
+        bytes memory callData, 
+        uint eta
+    ) internal pure returns (Transaction memory, bytes32) {
+        Transaction memory testTrx = Transaction({
+            target: target,
+            amount: amount,
+            eta: eta,
+            signature: signature,
+            callData: callData
+        });
+
+        bytes32 trxHash = keccak256(abi.encode(target, amount, signature, callData, eta));
+
+        return (testTrx, trxHash);
     }
 
 }
