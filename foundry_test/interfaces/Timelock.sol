@@ -4,6 +4,7 @@ pragma solidity ^0.8.16;
 interface Timelock {
     function queen() external view returns (address);
     function delay() external view returns (uint);
+    function setDelay(uint256 newDelay) external;
     function GRACE_PERIOD() external view returns (uint);
     function acceptQueen() external;
     function queuedTransactions(bytes32 hash) external view returns (bool);

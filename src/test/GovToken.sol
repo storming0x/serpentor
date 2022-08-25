@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.12;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/utils/math/SafeMath.sol";
+import "@openzeppelin/token/ERC20/ERC20.sol";
 
 contract GovToken is ERC20 {
     mapping(address => bool) public _blocked;
 
-    constructor(uint8 _decimals) public ERC20("yearn.finance test token", "TEST") {
-        _setupDecimals(_decimals);
+    constructor(uint8 _decimals) ERC20("yearn.finance test token", "TEST") {
         _mint(msg.sender, 30000 * 10**uint256(_decimals));
     }
 

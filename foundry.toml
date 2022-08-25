@@ -5,7 +5,8 @@ test = 'foundry_test'                        # the test directory
 out = 'out'                                  # the output directory (for artifacts)
 libs = ['lib']                               # a list of library directories
 remappings = [
-    'forge-std/=lib/forge-std/src/'
+    'forge-std/=lib/forge-std/src/',
+    '@openzeppelin/=lib/openzeppelin-contracts/contracts'
 ]                                             # a list of remappings
 cache = true                                 # whether to cache builds or not
 cache_path = 'cache'                         # where the cache is stored if enabled

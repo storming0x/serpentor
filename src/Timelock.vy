@@ -36,7 +36,7 @@ event NewPendingQueen:
     newPendingqueen: indexed(address)
 
 event NewDelay:
-    newDelay: indexed(uint256)
+    newDelay: uint256
 
 event CancelTransaction:
     txHash: indexed(bytes32)
