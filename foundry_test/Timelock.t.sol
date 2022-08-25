@@ -20,6 +20,7 @@ contract TimelockTest is ExtendedTest {
 
     event NewDelay(uint256 newDelay);
     event NewQueen(address indexed newQueen);
+    event QueueTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
 
     function setUp() public {
         bytes memory args = abi.encode(queen, delay);
@@ -144,6 +145,35 @@ contract TimelockTest is ExtendedTest {
         // execute
         vm.prank(address(queen));
         timelock.queueTransaction(emptyTrx);
+    }
+
+    function testShouldQueueTrx() public {
+        // setup
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, address(0xBEEF));
+        uint256 amount = 0;
+        string memory signature = "";
+
+        Transaction memory testTrx = Transaction({
+            target: target,
+            amount: amount,
+            eta: eta,
+            signature: signature,
+            callData: callData
+        });
+
+        bytes32 expectedTrxHash = keccak256(abi.encode(target, amount, signature, callData, eta));
+        //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit QueueTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        // asserts
+        assertEq(expectedTrxHash, trxHash);
+        assertTrue(timelock.queuedTransactions(trxHash));
     }
 
 }
