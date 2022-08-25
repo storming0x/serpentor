@@ -395,7 +395,6 @@ contract TimelockTest is ExtendedTest {
         vm.prank(address(queen));
         bytes32 trxHash = timelock.queueTransaction(testTrx);
         assertTrue(timelock.queuedTransactions(trxHash));
-        uint256 gracePeriod = timelock.GRACE_PERIOD();
         skip(eta + 1); // 1 pass eta
          //setup for event checks
         vm.expectEmit(true, true, false, false);
