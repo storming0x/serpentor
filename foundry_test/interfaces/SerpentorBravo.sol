@@ -17,6 +17,7 @@ struct Proposal {
     uint256 endBlock;
     uint256 forVotes;
     uint256 againstVotes;
+    uint256 abstainVotes;
     bool canceled;
     bool executed;
 }
@@ -33,6 +34,9 @@ interface SerpentorBravo {
     function proposalThreshold() external view returns (uint256);
     function initialProposalId() external view returns (uint256);
     function proposalMaxActions() external view returns (uint256);
+    function proposalCount() external view returns (uint256);
+    function proposals(uint256 id) external view returns (Proposal memory);
+    function latestProposalIds(address account) external view returns (uint256);
     // state changing funcs
     function setPendingQueen(address newQueen) external;
     function acceptThrone() external;

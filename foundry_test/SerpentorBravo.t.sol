@@ -32,6 +32,16 @@ contract SerpentorBravoTest is ExtendedTest {
     address public mediumVoter = address(4);
     address public whaleVoter = address(5);
     address public whitelistedProposer = address(6);
+
+    // events
+    event ProposalCreated(
+        uint256 id,
+        address indexed proposer,
+        ProposalAction[] actions,
+        uint256 startBlock,
+        uint256 endBlock,
+        string description
+    );
   
     function setUp() public {
         // deploy token
@@ -132,9 +142,8 @@ contract SerpentorBravoTest is ExtendedTest {
      function testCannotProposeTooManyActions(uint256 votes, uint8 size) public {
         uint256 maxActions = serpentor.proposalMaxActions();
         uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && size >= maxActions && size <= maxActions + 5);
-        console.log("votes", votes);
-        console.log("size", size);
         // setup
         address yoloProposer = address(0xBEEF);
         address grantee = address(0xABCD);
@@ -163,6 +172,57 @@ contract SerpentorBravoTest is ExtendedTest {
         //execute
         hoax(yoloProposer);
         serpentor.propose(actions, "test proposal");
+    }
+
+    function testCanSubmitProposal(uint256 votes) public {
+        uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        // setup
+        address grantProposer = address(0xBEEF);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory actions = new ProposalAction[](1);
+        actions[0] = testAction;
+        //setup for event checks
+        uint256 expectedStartBlock = block.number + serpentor.votingDelay();
+        uint256 expectedEndBlock = expectedStartBlock + serpentor.votingPeriod();
+        vm.expectEmit(false, true, false, false);
+        emit ProposalCreated(1, grantProposer, actions, expectedStartBlock, expectedEndBlock, "send grant to contributor");
+    
+        // execute
+        hoax(grantProposer);
+        uint256 proposalId = serpentor.propose(actions, "send grant to contributor");
+        Proposal memory proposal = serpentor.proposals(proposalId);
+
+        // asserts
+        assertEq(serpentor.proposalCount(), proposalId);
+        assertEq(serpentor.latestProposalIds(grantProposer), proposalId);
+        assertEq(proposal.id, proposalId);
+        assertEq(proposal.proposer, grantProposer);
+        assertEq(proposal.eta, 0);
+        assertEq(proposal.actions.length, actions.length);
+        assertEq(proposal.startBlock, expectedStartBlock);
+        assertEq(proposal.endBlock, expectedEndBlock);
+        assertEq(proposal.forVotes, 0);
+        assertEq(proposal.againstVotes, 0);
+        assertEq(proposal.abstainVotes, 0);
+        assertFalse(proposal.canceled);
+        assertFalse(proposal.executed);
     }
 
 }

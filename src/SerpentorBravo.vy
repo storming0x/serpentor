@@ -258,8 +258,10 @@ def __init__(
     self.proposalThreshold = proposalThreshold
     self.quorumVotes = quorumVotes
     self.initialProposalId = initialProposalId
+    self.proposalCount = initialProposalId
     self.queen = msg.sender
     self.proposalMaxActions = 10
+
 
 @external
 def propose(

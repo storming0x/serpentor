@@ -77,5 +77,6 @@ Code has not been audited
 
 ## Acknowledgements
 
+- [compound governance](https://github.com/compound-finance/compound-protocol/tree/master/contracts/Governance)
 - [snekmate](https://github.com/pcaversaccio/snekmate)
 - [vyperDeployer](https://github.com/0xKitsune/Foundry-Vyper/blob/main/lib/utils/VyperDeployer.sol)
