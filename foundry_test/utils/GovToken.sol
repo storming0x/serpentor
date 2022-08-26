@@ -8,11 +8,12 @@ import "@openzeppelin/token/ERC20/ERC20.sol";
 contract GovToken is ERC20 {
     mapping(address => bool) public _blocked;
     mapping(address => mapping(uint256 => uint256)) votingPower;
-    bool public useBalanceOfForVotingPower;
+    bool public defaultToBalanceOf;
 
 
     constructor(uint8 _decimals) ERC20("yearn.finance test token", "TEST") {
         _mint(msg.sender, 30000 * 10**uint256(_decimals));
+        defaultToBalanceOf = true;
     }
 
     function _setBlocked(address user, bool value) public virtual {
@@ -24,7 +25,7 @@ contract GovToken is ERC20 {
         address to,
         uint256 amount
     ) internal virtual override(ERC20) {
-        require(!_blocked[to], "Token transfer refused. Receiver is on blacklist");
+        require(!_blocked[to], "Token transfer refused. Receiver is blocked");
         super._beforeTokenTransfer(from, to, amount);
     }
 
@@ -33,11 +34,11 @@ contract GovToken is ERC20 {
     }
 
     function _setUseBalanceOfForVotingPower(bool flag) external {
-        useBalanceOfForVotingPower = flag;
+        defaultToBalanceOf = flag;
     }
 
     function getPriorVotes(address account, uint blockNumber) external view returns (uint256) {
-        if (useBalanceOfForVotingPower) {
+        if (defaultToBalanceOf) {
             return balanceOf(account);
         }
 

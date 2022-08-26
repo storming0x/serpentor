@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL
 pragma solidity ^0.8.16;
 
+import "@openzeppelin/token/ERC20/IERC20.sol";
 import {ExtendedTest} from "./utils/ExtendedTest.sol";
 import {VyperDeployer} from "../lib/utils/VyperDeployer.sol";
 
 import {console} from "forge-std/console.sol";
-import {SerpentorBravo} from "./interfaces/SerpentorBravo.sol";
+import {SerpentorBravo, ProposalAction, Proposal} from "./interfaces/SerpentorBravo.sol";
 import {Timelock} from "./interfaces/Timelock.sol";
 import {GovToken} from "./utils/GovToken.sol";
 
@@ -70,6 +71,7 @@ contract SerpentorBravoTest is ExtendedTest {
         deal(address(token), smallVoter, 1e18);
         deal(address(token), mediumVoter, 10e18);
         deal(address(token), whaleVoter, 200e18);
+        deal(address(token), address(serpentor), 1000e18);
     }
 
     function testSetup() public {
@@ -95,13 +97,72 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(token.balanceOf(whitelistedProposer), 0);
     }
 
-    function testCannotProposeBelowThreshold(uint256 balance) public {
-        vm.assume(balance < THRESHOLD);
+    function testCannotProposeBelowThreshold(uint256 votes) public {
+        vm.assume(votes <= THRESHOLD);
         // setup
         address yoloProposer = address(0xBEEF);
-        deal(address(token), yoloProposer, balance);
+        deal(address(token), yoloProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(yoloProposer, block.number), votes);
+        ProposalAction[] memory actions;
+        vm.expectRevert(bytes("!threshold"));
 
+        //execute
+        hoax(yoloProposer);
+        serpentor.propose(actions, "test proposal");
+    }
 
+    function testCannotProposeZeroActions(uint256 votes) public {
+        vm.assume(votes > THRESHOLD && votes < type(uint128).max);
+        // setup
+        address yoloProposer = address(0xBEEF);
+        deal(address(token), yoloProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(yoloProposer, block.number), votes);
+        ProposalAction[] memory actions;
+        vm.expectRevert(bytes("!no_actions"));
+
+        //execute
+        hoax(yoloProposer);
+        serpentor.propose(actions, "test proposal");
+    }
+
+     function testCannotProposeTooManyActions(uint256 votes, uint8 size) public {
+        uint256 maxActions = serpentor.proposalMaxActions();
+        uint256 threshold = serpentor.proposalThreshold();
+        vm.assume(votes > threshold && size >= maxActions && size <= maxActions + 5);
+        console.log("votes", votes);
+        console.log("size", size);
+        // setup
+        address yoloProposer = address(0xBEEF);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), yoloProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(yoloProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory actions = new ProposalAction[](size);
+        // fill up action array
+        for (uint i = 0; i < size; i++)
+             actions[i] = testAction;
+       
+        vm.expectRevert(bytes("!too_many_actions"));
+
+        //execute
+        hoax(yoloProposer);
+        serpentor.propose(actions, "test proposal");
     }
 
 }

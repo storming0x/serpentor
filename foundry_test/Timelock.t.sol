@@ -61,24 +61,24 @@ contract TimelockTest is ExtendedTest {
         assertEq(timelock.delay(), 5 days);
     }
 
-    function testDelayCannotBeBelowMinimum(uint256 delay) public {
-        vm.assume(delay < MINIMUM_DELAY);
+    function testDelayCannotBeBelowMinimum(uint256 newDelay) public {
+        vm.assume(newDelay < MINIMUM_DELAY);
         // setup
         vm.expectRevert("!MINIMUM_DELAY");
         // execute
         vm.prank(address(timelock));
         // delay minimum in contract is 2 days
-        timelock.setDelay(delay);
+        timelock.setDelay(newDelay);
     }
 
-    function testDelayCannotBeAboveMax(uint256 delay) public {
-        vm.assume(delay > MAXIMUM_DELAY && delay <= 1000 days);
+    function testDelayCannotBeAboveMax(uint256 newDelay) public {
+        vm.assume(newDelay > MAXIMUM_DELAY && newDelay <= 1000 days);
         // setup
         vm.expectRevert("!MAXIMUM_DELAY");
         // execute
         vm.prank(address(timelock));
         // delay maximum in contract is 30 days
-        timelock.setDelay(delay);
+        timelock.setDelay(newDelay);
     }
 
     function testRandomAcctCannotSetNewQueen(address random) public {

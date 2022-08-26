@@ -259,6 +259,7 @@ def __init__(
     self.quorumVotes = quorumVotes
     self.initialProposalId = initialProposalId
     self.queen = msg.sender
+    self.proposalMaxActions = 10
 
 @external
 def propose(
@@ -276,7 +277,7 @@ def propose(
     assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
 
     assert len(actions) != 0, "!no_actions"
-    assert len(actions) <= self.proposalMaxActions, "!too_many_actions"
+    assert len(actions) < self.proposalMaxActions, "!too_many_actions"
 
     latestProposalId: uint256 =  self.latestProposalIds[msg.sender]
     if latestProposalId != 0:

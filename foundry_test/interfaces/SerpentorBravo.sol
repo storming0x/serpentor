@@ -32,7 +32,9 @@ interface SerpentorBravo {
     function quorumVotes() external view returns (uint256);
     function proposalThreshold() external view returns (uint256);
     function initialProposalId() external view returns (uint256);
+    function proposalMaxActions() external view returns (uint256);
     // state changing funcs
     function setPendingQueen(address newQueen) external;
     function acceptThrone() external;
+    function propose(ProposalAction[] calldata actions, string calldata description) external returns (uint256);
 }
