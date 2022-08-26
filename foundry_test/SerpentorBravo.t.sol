@@ -7,14 +7,14 @@ import {VyperDeployer} from "../lib/utils/VyperDeployer.sol";
 import {console} from "forge-std/console.sol";
 import {SerpentorBravo} from "./interfaces/SerpentorBravo.sol";
 import {Timelock} from "./interfaces/Timelock.sol";
-import {Token} from "./interfaces/Token.sol";
+import {GovToken} from "./utils/GovToken.sol";
 
 contract SerpentorBravoTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
     SerpentorBravo private serpentor;
 
     Timelock private timelock;
-    Token private token;
+    GovToken private token;
     uint public constant GRACE_PERIOD = 14 days;
     uint public constant MINIMUM_DELAY = 2 days;
     uint public constant MAXIMUM_DELAY = 30 days;
@@ -22,13 +22,14 @@ contract SerpentorBravoTest is ExtendedTest {
     uint public constant THRESHOLD = 100e18;
     uint public constant QUORUM_VOTES = 1000e18;
     uint public constant VOTING_DELAY = 20000;
+    uint8 public constant DECIMALS = 18;
     uint public delay = 2 days;
 
     address public queen = address(1);
   
     function setUp() public {
         // deploy token
-        token = Token(vyperDeployer.deployContract("src/test/", "Token"));
+        token = new GovToken(DECIMALS);
         console.log("address for token: ", address(token));
 
         // deploy timelock
@@ -52,6 +53,12 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.label(address(serpentor), "SerpentorBravo");
         vm.label(address(timelock), "Timelock");
         vm.label(address(token), "Token");
+
+        // hand over control to queen
+        hoax(address(vyperDeployer));
+        serpentor.setPendingQueen(queen);
+        hoax(queen);
+        serpentor.acceptThrone();
     }
 
     function testSetup() public {
@@ -66,5 +73,10 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(serpentor.proposalThreshold(), THRESHOLD);
         assertEq(serpentor.quorumVotes(), QUORUM_VOTES);
         assertEq(serpentor.initialProposalId(), 0);
+        assertEq(serpentor.queen(), queen);
+        assertEq(serpentor.pendingQueen(), address(0));
+        // check tests have correct starting balance of tokens
+        assertEq(token.balanceOf(address(this)), 30000 * 10**uint256(DECIMALS));
     }
+
 }

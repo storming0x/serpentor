@@ -474,7 +474,7 @@ def setPendingQueen(newPendingQueen: address):
     log NewPendingQueen(oldPendingQueen, newPendingQueen)
 
 @external
-def acceptThone():
+def acceptThrone():
     """
     @notice Accepts transfer of crown and governor rights
     @dev msg.sender must be pendingQueen
