@@ -227,4 +227,86 @@ contract SerpentorBravoTest is ExtendedTest {
         assertTrue(state == uint8(ProposalState.PENDING));
     }
 
+     function testCannotProposeIfLastProposalIsPending(uint256 votes) public {
+        uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        // setup
+        address grantProposer = address(0xBEEF);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory firstProposalActions = new ProposalAction[](1);
+        firstProposalActions[0] = testAction;
+    
+        // setup first proposal
+        hoax(grantProposer);
+        uint256 proposalId = serpentor.propose(firstProposalActions, "send grant to contributor");
+        uint8 state = serpentor.ordinalState(proposalId);
+        assertTrue(state == uint8(ProposalState.PENDING));
+
+        ProposalAction[] memory secondProposalActions = new ProposalAction[](1);
+        secondProposalActions[0] = testAction;
+
+        // execute
+        vm.expectRevert(bytes("!latestPropId_state"));
+        hoax(grantProposer);
+        serpentor.propose(secondProposalActions, "send second grant to contributor");
+    }
+
+    function testCannotProposeIfLastProposalIsActive(uint256 votes) public {
+        uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        // setup
+        address grantProposer = address(0xBEEF);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory firstProposalActions = new ProposalAction[](1);
+        firstProposalActions[0] = testAction;
+    
+        // setup first proposal
+        hoax(grantProposer);
+        uint256 proposalId = serpentor.propose(firstProposalActions, "send grant to contributor");
+        // increase block.number after startBlock
+        vm.roll(serpentor.votingDelay() + 2);
+        uint8 state = serpentor.ordinalState(proposalId);
+        assertEq(state,uint8(ProposalState.ACTIVE));
+        ProposalAction[] memory secondProposalActions = new ProposalAction[](1);
+        secondProposalActions[0] = testAction;
+
+        // execute
+        vm.expectRevert(bytes("!latestPropId_state"));
+        hoax(grantProposer);
+        serpentor.propose(secondProposalActions, "send second grant to contributor");
+    }
+
+
 }

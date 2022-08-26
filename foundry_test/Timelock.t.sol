@@ -41,7 +41,7 @@ contract TimelockTest is ExtendedTest {
     }
 
     function testRandomAcctCannotSetDelay(address random) public {
-        vm.assume(random != queen);
+        vm.assume(random != address(timelock));
         vm.expectRevert("!Timelock");
 
         vm.prank(random);
@@ -82,7 +82,7 @@ contract TimelockTest is ExtendedTest {
     }
 
     function testRandomAcctCannotSetNewQueen(address random) public {
-        vm.assume(random != queen);
+        vm.assume(random != address(timelock));
         // setup
         vm.expectRevert(bytes("!Timelock"));
         // execute
