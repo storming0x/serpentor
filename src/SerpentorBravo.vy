@@ -275,7 +275,6 @@ def propose(
     # check voting power or whitelist access
     assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
 
-
     assert len(actions) != 0, "!no_actions"
     assert len(actions) <= self.proposalMaxActions, "!too_many_actions"
 

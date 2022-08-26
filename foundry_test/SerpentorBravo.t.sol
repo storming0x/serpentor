@@ -26,6 +26,11 @@ contract SerpentorBravoTest is ExtendedTest {
     uint public delay = 2 days;
 
     address public queen = address(1);
+    address public proposer = address(2);
+    address public smallVoter = address(3);
+    address public mediumVoter = address(4);
+    address public whaleVoter = address(5);
+    address public whitelistedProposer = address(6);
   
     function setUp() public {
         // deploy token
@@ -59,6 +64,12 @@ contract SerpentorBravoTest is ExtendedTest {
         serpentor.setPendingQueen(queen);
         hoax(queen);
         serpentor.acceptThrone();
+
+        // setup voting balances
+        deal(address(token), proposer, THRESHOLD + 1);
+        deal(address(token), smallVoter, 1e18);
+        deal(address(token), mediumVoter, 10e18);
+        deal(address(token), whaleVoter, 200e18);
     }
 
     function testSetup() public {
@@ -77,6 +88,20 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(serpentor.pendingQueen(), address(0));
         // check tests have correct starting balance of tokens
         assertEq(token.balanceOf(address(this)), 30000 * 10**uint256(DECIMALS));
+        assertEq(token.balanceOf(proposer), THRESHOLD + 1);
+        assertEq(token.balanceOf(smallVoter), 1e18);
+        assertEq(token.balanceOf(mediumVoter), 10e18);
+        assertEq(token.balanceOf(whaleVoter), 200e18);
+        assertEq(token.balanceOf(whitelistedProposer), 0);
+    }
+
+    function testCannotProposeBelowThreshold(uint256 balance) public {
+        vm.assume(balance < THRESHOLD);
+        // setup
+        address yoloProposer = address(0xBEEF);
+        deal(address(token), yoloProposer, balance);
+
+
     }
 
 }
