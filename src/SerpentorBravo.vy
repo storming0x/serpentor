@@ -3,6 +3,8 @@
 # @dev adjust these settings to your own use case
 
 NAME: constant(String[20]) = "Serpentor Bravo"
+# buffer for string descriptions. Can use ipfshash
+STR_LEN: constant(uint256) = 4000
 MAX_DATA_LEN: constant(uint256) = 16608
 CALL_DATA_LEN: constant(uint256) = 16483
 METHOD_SIG_SIZE: constant(uint256) = 1024
@@ -159,7 +161,7 @@ event ProposalCreated:
     actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]
     startBlock: uint256
     endBlock: uint256
-    description: String[MAX_DATA_LEN]
+    description: String[STR_LEN]
 
 # @notice An event emitted when a proposal has been queued in the Timelock
 event ProposalQueued:
@@ -185,7 +187,7 @@ event VoteCast:
     proposalId: uint256
     support: uint8
     votes: uint256
-    reason: String[MAX_DATA_LEN] 
+    reason: String[STR_LEN] 
 
 # @notice Event emitted when the voting delay is set
 event VotingDelaySet:
@@ -261,7 +263,7 @@ def __init__(
 @external
 def propose(
     actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS],
-    description: String[MAX_DATA_LEN]
+    description: String[STR_LEN]
 ) -> uint256:
     """
     @notice
@@ -373,7 +375,7 @@ def vote(proposalId: uint256, support: uint8):
     log VoteCast(msg.sender, proposalId, support, self._vote(msg.sender, proposalId, support), "")
 
 @external
-def voteWithReason(proposalId: uint256, support: uint8, reason: String[MAX_DATA_LEN]):
+def voteWithReason(proposalId: uint256, support: uint8, reason: String[STR_LEN]):
     """
     @notice Cast a vote for a proposal with a reason string
     @param proposalId The id of the proposal
