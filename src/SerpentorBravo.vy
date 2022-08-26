@@ -62,6 +62,7 @@ interface GovToken:
     def getPriorVotes(account: address, blockNumber: uint256) -> uint256:view
 
 # @notice Possible states that a proposal may be in
+# @dev vyper enums follow a power of 2 enumeration e.g 1, 2, 4, 8, etc.
 enum ProposalState:
     PENDING
     ACTIVE
@@ -258,7 +259,10 @@ def __init__(
     self.proposalThreshold = proposalThreshold
     self.quorumVotes = quorumVotes
     self.initialProposalId = initialProposalId
+    self.proposalCount = initialProposalId
     self.queen = msg.sender
+    self.proposalMaxActions = 10
+
 
 @external
 def propose(
@@ -275,9 +279,8 @@ def propose(
     # check voting power or whitelist access
     assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
 
-
     assert len(actions) != 0, "!no_actions"
-    assert len(actions) <= self.proposalMaxActions, "!too_many_actions"
+    assert len(actions) < self.proposalMaxActions, "!too_many_actions"
 
     latestProposalId: uint256 =  self.latestProposalIds[msg.sender]
     if latestProposalId != 0:
@@ -474,7 +477,7 @@ def setPendingQueen(newPendingQueen: address):
     log NewPendingQueen(oldPendingQueen, newPendingQueen)
 
 @external
-def acceptThone():
+def acceptThrone():
     """
     @notice Accepts transfer of crown and governor rights
     @dev msg.sender must be pendingQueen
@@ -508,7 +511,41 @@ def setKnight(newKnight: address):
 @external
 @view
 def state(proposalId: uint256)  -> ProposalState:
+    """
+    @notice returns enum value of proposalId 
+    @dev when calling this method from ABI interfaces be aware enums in vyper have a different enumeration from solidity enums.
+    @dev also check `ordinalState()` method
+    @param proposalId Id of proposal
+    """
     return self._state(proposalId)
+
+
+@external
+@view
+def ordinalState(proposalId: uint256) -> uint8:
+    """
+    @notice returns ordinal value of proposalId which is different from enum value
+    @dev function to support compatibility with solidity enums
+    @dev also check `state()` method
+    @param proposalId Id of proposal
+    """
+    proposalState: ProposalState = self._state(proposalId)
+    if proposalState == ProposalState.PENDING:
+        return 0
+    elif proposalState == ProposalState.ACTIVE:
+        return 1
+    elif proposalState == ProposalState.CANCELED:
+        return 2
+    elif proposalState == ProposalState.DEFEATED:
+        return 3
+    elif proposalState == ProposalState.SUCCEEDED:
+        return 4
+    elif proposalState == ProposalState.QUEUED:
+        return 5
+    elif proposalState == ProposalState.EXPIRED:
+        return 6
+    else:
+        return 7
 
 @external
 @view
@@ -603,7 +640,6 @@ def _state(proposalId: uint256) -> ProposalState:
     assert self.proposalCount >= proposalId and proposalId > self.initialProposalId, "!proposalId"
 
     proposal: Proposal = self.proposals[proposalId]
-
     if proposal.canceled:
         return ProposalState.CANCELED
     elif block.number <= proposal.startBlock:
