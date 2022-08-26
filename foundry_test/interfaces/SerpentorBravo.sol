@@ -1,6 +1,19 @@
 // SPDX-License-Identifier: AGPL
 pragma solidity ^0.8.16;
 
+// vyper enums have different enumeration number from solidity
+enum ProposalState {
+    PENDING,
+    ACTIVE,
+    CANCELED,
+    DEFEATED,  
+    SUCCEEDED,
+    QUEUED,
+    EXPIRED,
+    EXECUTED
+}
+    
+
 struct ProposalAction {
     address target;
     uint256 amount;
@@ -35,8 +48,10 @@ interface SerpentorBravo {
     function initialProposalId() external view returns (uint256);
     function proposalMaxActions() external view returns (uint256);
     function proposalCount() external view returns (uint256);
-    function proposals(uint256 id) external view returns (Proposal memory);
+    function proposals(uint256 proposalId) external view returns (Proposal memory);
     function latestProposalIds(address account) external view returns (uint256);
+    function state(uint256 proposalId) external view returns (ProposalState);
+    function ordinalState(uint256 proposalId) external view returns (uint8);
     // state changing funcs
     function setPendingQueen(address newQueen) external;
     function acceptThrone() external;

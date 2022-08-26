@@ -6,7 +6,7 @@ import {ExtendedTest} from "./utils/ExtendedTest.sol";
 import {VyperDeployer} from "../lib/utils/VyperDeployer.sol";
 
 import {console} from "forge-std/console.sol";
-import {SerpentorBravo, ProposalAction, Proposal} from "./interfaces/SerpentorBravo.sol";
+import {SerpentorBravo, ProposalAction, Proposal, ProposalState} from "./interfaces/SerpentorBravo.sol";
 import {Timelock} from "./interfaces/Timelock.sol";
 import {GovToken} from "./utils/GovToken.sol";
 
@@ -208,6 +208,7 @@ contract SerpentorBravoTest is ExtendedTest {
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(actions, "send grant to contributor");
         Proposal memory proposal = serpentor.proposals(proposalId);
+        uint8 state = serpentor.ordinalState(proposalId);
 
         // asserts
         assertEq(serpentor.proposalCount(), proposalId);
@@ -223,6 +224,7 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(proposal.abstainVotes, 0);
         assertFalse(proposal.canceled);
         assertFalse(proposal.executed);
+        assertTrue(state == uint8(ProposalState.PENDING));
     }
 
 }

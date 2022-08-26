@@ -62,6 +62,7 @@ interface GovToken:
     def getPriorVotes(account: address, blockNumber: uint256) -> uint256:view
 
 # @notice Possible states that a proposal may be in
+# @dev vyper enums follow a power of 2 enumeration e.g 1, 2, 4, 8, etc.
 enum ProposalState:
     PENDING
     ACTIVE
@@ -512,6 +513,28 @@ def setKnight(newKnight: address):
 def state(proposalId: uint256)  -> ProposalState:
     return self._state(proposalId)
 
+# @dev function to support compatibility with solidity enums
+@external
+@view
+def ordinalState(proposalId: uint256) -> uint8:
+    proposalState: ProposalState = self._state(proposalId)
+    if proposalState == ProposalState.PENDING:
+        return 0
+    elif proposalState == ProposalState.ACTIVE:
+        return 1
+    elif proposalState == ProposalState.CANCELED:
+        return 2
+    elif proposalState == ProposalState.DEFEATED:
+        return 3
+    elif proposalState == ProposalState.SUCCEEDED:
+        return 4
+    elif proposalState == ProposalState.QUEUED:
+        return 5
+    elif proposalState == ProposalState.EXPIRED:
+        return 6
+    else:
+        return 7
+
 @external
 @view
 def isWhitelisted(account: address) -> bool:
@@ -605,7 +628,6 @@ def _state(proposalId: uint256) -> ProposalState:
     assert self.proposalCount >= proposalId and proposalId > self.initialProposalId, "!proposalId"
 
     proposal: Proposal = self.proposals[proposalId]
-
     if proposal.canceled:
         return ProposalState.CANCELED
     elif block.number <= proposal.startBlock:
