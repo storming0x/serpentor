@@ -34,6 +34,7 @@ contract SerpentorBravoTest is ExtendedTest {
     address public whaleVoter2 = address(6);
     address public whitelistedProposer = address(7);
     address public knight = address(8);
+    address public grantee = address(0xABCD);
 
     // events
     event ProposalCreated(
@@ -78,6 +79,8 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.label(mediumVoter, "mediumVoter");
         vm.label(whaleVoter1, "whaleVoter1");
         vm.label(whaleVoter2, "whaleVoter2");
+        vm.label(whitelistedProposer, "whitelistedProposer");
+        vm.label(grantee, "grantee");
 
         // setup coupled governance between serpentor and timelock
         hoax(address(vyperDeployer));
@@ -168,7 +171,6 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(votes > threshold && size >= maxActions && size <= maxActions + 5);
         // setup
         address yoloProposer = address(0xBEEF);
-        address grantee = address(0xABCD);
         uint256 transferAmount = 1e18;
         deal(address(token), yoloProposer, votes);
     
@@ -198,28 +200,10 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testCanSubmitProposal(uint256 votes) public {
         uint256 threshold = serpentor.proposalThreshold();
-        // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && votes < type(uint128).max);
         // setup
         address grantProposer = address(0xBEEF);
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), grantProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory actions = new ProposalAction[](1);
-        actions[0] = testAction;
+        ProposalAction[] memory actions = setupTestProposal(grantProposer, votes);
         //setup for event checks
         uint256 expectedStartBlock = block.number + serpentor.votingDelay();
         uint256 expectedEndBlock = expectedStartBlock + serpentor.votingPeriod();
@@ -251,37 +235,19 @@ contract SerpentorBravoTest is ExtendedTest {
 
      function testCannotProposeIfLastProposalIsPending(uint256 votes) public {
         uint256 threshold = serpentor.proposalThreshold();
-        // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && votes < type(uint128).max);
-        // setup
-        address grantProposer = address(0xBEEF);
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), grantProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory firstProposalActions = new ProposalAction[](1);
-        firstProposalActions[0] = testAction;
-    
+         
         // setup first proposal
+        address grantProposer = address(0xBEEF);
+        ProposalAction[] memory firstProposalActions = setupTestProposal(grantProposer, votes);
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(firstProposalActions, "send grant to contributor");
         uint8 state = serpentor.ordinalState(proposalId);
         assertTrue(state == uint8(ProposalState.PENDING));
 
         ProposalAction[] memory secondProposalActions = new ProposalAction[](1);
-        secondProposalActions[0] = testAction;
+        // copy action
+        secondProposalActions[0] = firstProposalActions[0];
 
         // execute
         vm.expectRevert(bytes("!latestPropId_state"));
@@ -291,30 +257,11 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testCannotProposeIfLastProposalIsActive(uint256 votes) public {
         uint256 threshold = serpentor.proposalThreshold();
-        // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && votes < type(uint128).max);
-        // setup
-        address grantProposer = address(0xBEEF);
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), grantProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory firstProposalActions = new ProposalAction[](1);
-        firstProposalActions[0] = testAction;
-    
+          
         // setup first proposal
+        address grantProposer = address(0xBEEF);
+        ProposalAction[] memory firstProposalActions = setupTestProposal(grantProposer, votes);
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(firstProposalActions, "send grant to contributor");
         // increase block.number after startBlock
@@ -322,7 +269,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint8 state = serpentor.ordinalState(proposalId);
         assertEq(state,uint8(ProposalState.ACTIVE));
         ProposalAction[] memory secondProposalActions = new ProposalAction[](1);
-        secondProposalActions[0] = testAction;
+        secondProposalActions[0] = firstProposalActions[0];
 
         // execute
         vm.expectRevert(bytes("!latestPropId_state"));
@@ -330,32 +277,12 @@ contract SerpentorBravoTest is ExtendedTest {
         serpentor.propose(secondProposalActions, "send second grant to contributor");
     }
 
-    function testShouldCancelWhenSenderIsProposerAndProposalActive(uint256 votes) public {
+    function testShouldCancelWhenSenderIsProposerAndProposalActive(uint256 votes, address grantProposer) public {
         uint256 threshold = serpentor.proposalThreshold();
-        // if maxActions is a big number, tests runs out of gas
+        vm.assume(grantProposer != knight && grantProposer != whitelistedProposer);
         vm.assume(votes > threshold && votes < type(uint128).max);
-        // setup
-        address grantProposer = address(0xBEEF);
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), grantProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory proposalActions = new ProposalAction[](1);
-        proposalActions[0] = testAction;
-    
         // setup proposal
+        ProposalAction[] memory proposalActions = setupTestProposal(grantProposer, votes);
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
         // increase block.number after startBlock
@@ -378,34 +305,19 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testCannotCancelProposalIfProposerIsAboveThreshold(
-        uint256 votes
+        uint256 votes,
+        address grantProposer,
+        address randomAcct
     ) public {
+        vm.assume(randomAcct != grantProposer && randomAcct != knight && randomAcct != whitelistedProposer);
+        vm.assume(grantProposer != knight && grantProposer != whitelistedProposer);
         uint256 threshold = serpentor.proposalThreshold();
         // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && votes < type(uint128).max);
-        // setup
-        address grantProposer = address(0xBEEF);
-        address randomAcct = address(0xdeadbeef);
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), grantProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory proposalActions = new ProposalAction[](1);
-        proposalActions[0] = testAction;
-    
         // setup proposal
+ 
+        ProposalAction[] memory proposalActions = setupTestProposal(grantProposer, votes);
+    
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
         // increase block.number after startBlock
@@ -422,33 +334,17 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testShouldCancelProposalIfProposerIsBelowThreshold(
         uint256 votes,
-        uint256 updatedVotes
+        uint256 updatedVotes,
+        address grantProposer,
+        address randomAcct
     ) public {
-            uint256 threshold = serpentor.proposalThreshold();
-        // if maxActions is a big number, tests runs out of gas
+        vm.assume(randomAcct != grantProposer && randomAcct != knight && randomAcct != whitelistedProposer);
+        vm.assume(grantProposer != knight && grantProposer != whitelistedProposer);
+        uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > threshold && votes < type(uint128).max);
         vm.assume(updatedVotes < threshold);
-        // setup
-        address grantProposer = address(0xBEEF);
-        address randomAcct = address(0xdeadbeef);
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), grantProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory proposalActions = new ProposalAction[](1);
-        proposalActions[0] = testAction;
+        // setup proposal
+        ProposalAction[] memory proposalActions = setupTestProposal(grantProposer, votes);
     
         // setup proposal
         hoax(grantProposer);
@@ -479,32 +375,15 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testCannotCancelWhitelistedProposerBelowThreshold(
         uint256 votes,
-        uint256 updatedVotes
+        uint256 updatedVotes,
+        address randomAcct
     ) public {
         uint256 threshold = serpentor.proposalThreshold();
-        // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && votes < type(uint128).max);
         vm.assume(updatedVotes < threshold);
+        vm.assume(randomAcct != knight && randomAcct != address(timelock) && randomAcct != whitelistedProposer);
         // setup
-        address randomAcct = address(0xdeadbeef);
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), whitelistedProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(whitelistedProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory proposalActions = new ProposalAction[](1);
-        proposalActions[0] = testAction;
+        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, votes);
     
         // setup proposal
         hoax(whitelistedProposer);
@@ -535,24 +414,7 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(votes > threshold && votes < type(uint128).max);
         vm.assume(updatedVotes < threshold);
         // setup
-        address grantee = address(0xABCD);
-        uint256 transferAmount = 1e18;
-        deal(address(token), whitelistedProposer, votes);
-    
-        skip(2 days);
-        assertEq(token.getPriorVotes(whitelistedProposer, block.number), votes);
-        // transfer 1e18 token to grantee
-        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-
-        ProposalAction memory testAction = ProposalAction({
-            target: address(token),
-            amount: 0,
-            signature: "",
-            callData: callData
-        });
-
-        ProposalAction[] memory proposalActions = new ProposalAction[](1);
-        proposalActions[0] = testAction;
+        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, votes);
     
         // setup proposal
         hoax(whitelistedProposer);
@@ -617,5 +479,34 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.expectRevert(bytes("!access"));
         hoax(address(randomAcct));
         serpentor.setWhitelistAccountExpiration(randomAcct, expiration);
+    }
+
+    function testVote(uint256 votes) public {
+
+    }
+
+    function setupTestProposal(
+        address grantProposer, 
+        uint256 votes) internal returns (ProposalAction[] memory) {
+
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory actions = new ProposalAction[](1);
+        actions[0] = testAction;
+
+        return actions;
     }
 }
