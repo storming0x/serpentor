@@ -357,9 +357,9 @@ def cancel(proposalId: uint256):
     if msg.sender != proposer:
         # Whitelisted proposers can't be canceled for falling below proposal threshold unless msg.sender is knight
         if self._isWhitelisted(proposer):
-            assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) < self.proposalThreshold and msg.sender == self.knight, "!whitelisted_proposer"
+            assert GovToken(self.token).getPriorVotes(proposer, block.number - 1) < self.proposalThreshold and msg.sender == self.knight, "!whitelisted_proposer"
         else:
-            assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) < self.proposalThreshold, "!threshold"
+            assert GovToken(self.token).getPriorVotes(proposer, block.number - 1) < self.proposalThreshold, "!threshold"
 
     self.proposals[proposalId].canceled = True
     for action in proposal.actions:

@@ -358,7 +358,6 @@ contract SerpentorBravoTest is ExtendedTest {
         // setup proposal
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
-        console.log("proposalId", proposalId);
         // increase block.number after startBlock
         vm.roll(serpentor.votingDelay() + 2);
         uint8 state = serpentor.ordinalState(proposalId);
@@ -376,6 +375,49 @@ contract SerpentorBravoTest is ExtendedTest {
         // asserts
         assertTrue(updatedProposal.canceled);
         assertEq(state,uint8(ProposalState.CANCELED));
+    }
+
+    function testCannotCancelProposalIfProposerIsAboveThreshold(
+        uint256 votes
+    ) public {
+        uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        // setup
+        address grantProposer = address(0xBEEF);
+        address randomAcct = address(0xdeadbeef);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory proposalActions = new ProposalAction[](1);
+        proposalActions[0] = testAction;
+    
+        // setup proposal
+        hoax(grantProposer);
+        uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
+        // increase block.number after startBlock
+        vm.roll(serpentor.votingDelay() + 2);
+        uint8 state = serpentor.ordinalState(proposalId);
+        assertEq(state,uint8(ProposalState.ACTIVE));
+        // setup event
+        vm.expectRevert(bytes("!threshold"));
+    
+        // execute
+        hoax(randomAcct);
+        serpentor.cancel(proposalId);
     }
 
     function testShouldCancelProposalIfProposerIsBelowThreshold(
@@ -434,7 +476,7 @@ contract SerpentorBravoTest is ExtendedTest {
         assertTrue(updatedProposal.canceled);
         assertEq(state,uint8(ProposalState.CANCELED));
     }
-    // TODO: add whitelisted
+
     function testCannotCancelWhitelistedProposerBelowThreshold(
         uint256 votes,
         uint256 updatedVotes
@@ -444,14 +486,13 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(votes > threshold && votes < type(uint128).max);
         vm.assume(updatedVotes < threshold);
         // setup
-        address grantProposer = address(0xBEEF);
         address randomAcct = address(0xdeadbeef);
         address grantee = address(0xABCD);
         uint256 transferAmount = 1e18;
-        deal(address(token), grantProposer, votes);
+        deal(address(token), whitelistedProposer, votes);
     
         skip(2 days);
-        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        assertEq(token.getPriorVotes(whitelistedProposer, block.number), votes);
         // transfer 1e18 token to grantee
         bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
 
@@ -466,7 +507,7 @@ contract SerpentorBravoTest is ExtendedTest {
         proposalActions[0] = testAction;
     
         // setup proposal
-        hoax(grantProposer);
+        hoax(whitelistedProposer);
         uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
         // increase block.number after startBlock
         vm.roll(serpentor.votingDelay() + 2);
@@ -474,16 +515,65 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(state,uint8(ProposalState.ACTIVE));
         // proposer goes below
         uint256 balanceOut = votes - updatedVotes;
-        hoax(grantProposer);
+        hoax(whitelistedProposer);
         token.transfer(address(100), balanceOut);
-        assertEq(token.balanceOf(grantProposer), updatedVotes);
+        assertEq(token.balanceOf(whitelistedProposer), updatedVotes);
+        // setup revert
+        vm.expectRevert(bytes("!whitelisted_proposer"));
+    
+        // execute
+        hoax(randomAcct);
+        serpentor.cancel(proposalId);
+    }
+
+    function testShouldCancelWhitelistedProposerBelowThresholdAsKnight(
+        uint256 votes,
+        uint256 updatedVotes
+    ) public {
+        uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        vm.assume(updatedVotes < threshold);
+        // setup
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), whitelistedProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(whitelistedProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory proposalActions = new ProposalAction[](1);
+        proposalActions[0] = testAction;
+    
+        // setup proposal
+        hoax(whitelistedProposer);
+        uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
+        // increase block.number after startBlock
+        vm.roll(serpentor.votingDelay() + 2);
+        uint8 state = serpentor.ordinalState(proposalId);
+        assertEq(state,uint8(ProposalState.ACTIVE));
+        // proposer goes below
+        uint256 balanceOut = votes - updatedVotes;
+        hoax(whitelistedProposer);
+        token.transfer(address(100), balanceOut);
+        assertEq(token.balanceOf(whitelistedProposer), updatedVotes);
         // setup event
         vm.expectEmit(false, false, false, false);
         emit ProposalCanceled(proposalId);
     
         // execute
-        hoax(randomAcct);
+        hoax(knight);
         serpentor.cancel(proposalId);
+
         state = serpentor.ordinalState(proposalId);
         Proposal memory updatedProposal = serpentor.proposals(proposalId);
 
