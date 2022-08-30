@@ -39,6 +39,7 @@ interface SerpentorBravo {
     // view functions
     function queen() external view returns (address);
     function pendingQueen() external view returns (address);
+    function knight() external view returns (address);
     function timelock() external view returns (address);
     function token() external view returns (address);
     function votingPeriod() external view returns (uint256);
@@ -52,9 +53,14 @@ interface SerpentorBravo {
     function latestProposalIds(address account) external view returns (uint256);
     function state(uint256 proposalId) external view returns (ProposalState);
     function ordinalState(uint256 proposalId) external view returns (uint8);
+    function isWhitelisted(address account) external view returns (bool);
+
     // state changing funcs
     function setPendingQueen(address newQueen) external;
     function acceptThrone() external;
     function propose(ProposalAction[] calldata actions, string calldata description) external returns (uint256);
     function cancel(uint256 proposalId) external;
+    function setWhitelistAccountExpiration(address account, uint256 expiration) external;
+    function setKnight(address newKnight) external;
+    
 }

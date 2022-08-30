@@ -33,6 +33,7 @@ contract SerpentorBravoTest is ExtendedTest {
     address public whaleVoter1 = address(5);
     address public whaleVoter2 = address(6);
     address public whitelistedProposer = address(7);
+    address public knight = address(8);
 
     // events
     event ProposalCreated(
@@ -87,6 +88,10 @@ contract SerpentorBravoTest is ExtendedTest {
         timelock.setPendingQueen(address(serpentor));
         hoax(address(serpentor));
         timelock.acceptThrone();
+        hoax(address(timelock));
+        serpentor.setKnight(knight);
+        hoax(address(knight));
+        serpentor.setWhitelistAccountExpiration(whitelistedProposer, block.timestamp + 300 days);
 
         // setup voting balances
         deal(address(token), proposer, THRESHOLD + 1);
@@ -112,6 +117,8 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(serpentor.queen(), address(timelock));
         assertEq(serpentor.pendingQueen(), address(0));
         assertEq(timelock.queen(), address(serpentor));
+        assertEq(serpentor.knight(), knight);
+        assertTrue(serpentor.isWhitelisted(whitelistedProposer));
         // check tests have correct starting balance of tokens
         assertEq(token.balanceOf(address(this)), 30000 * 10**uint256(DECIMALS));
         assertEq(token.balanceOf(proposer), THRESHOLD + 1);
@@ -371,5 +378,154 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(state,uint8(ProposalState.CANCELED));
     }
 
+    function testShouldCancelProposalIfProposerIsBelowThreshold(
+        uint256 votes,
+        uint256 updatedVotes
+    ) public {
+            uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        vm.assume(updatedVotes < threshold);
+        // setup
+        address grantProposer = address(0xBEEF);
+        address randomAcct = address(0xdeadbeef);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
 
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory proposalActions = new ProposalAction[](1);
+        proposalActions[0] = testAction;
+    
+        // setup proposal
+        hoax(grantProposer);
+        uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
+        // increase block.number after startBlock
+        vm.roll(serpentor.votingDelay() + 2);
+        uint8 state = serpentor.ordinalState(proposalId);
+        assertEq(state,uint8(ProposalState.ACTIVE));
+        // proposer goes below
+        uint256 balanceOut = votes - updatedVotes;
+        hoax(grantProposer);
+        token.transfer(address(100), balanceOut);
+        assertEq(token.balanceOf(grantProposer), updatedVotes);
+        // setup event
+        vm.expectEmit(false, false, false, false);
+        emit ProposalCanceled(proposalId);
+    
+        // execute
+        hoax(randomAcct);
+        serpentor.cancel(proposalId);
+        state = serpentor.ordinalState(proposalId);
+        Proposal memory updatedProposal = serpentor.proposals(proposalId);
+
+        // asserts
+        assertTrue(updatedProposal.canceled);
+        assertEq(state,uint8(ProposalState.CANCELED));
+    }
+    // TODO: add whitelisted
+    function testCannotCancelWhitelistedProposerBelowThreshold(
+        uint256 votes,
+        uint256 updatedVotes
+    ) public {
+        uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        vm.assume(updatedVotes < threshold);
+        // setup
+        address grantProposer = address(0xBEEF);
+        address randomAcct = address(0xdeadbeef);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory proposalActions = new ProposalAction[](1);
+        proposalActions[0] = testAction;
+    
+        // setup proposal
+        hoax(grantProposer);
+        uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
+        // increase block.number after startBlock
+        vm.roll(serpentor.votingDelay() + 2);
+        uint8 state = serpentor.ordinalState(proposalId);
+        assertEq(state,uint8(ProposalState.ACTIVE));
+        // proposer goes below
+        uint256 balanceOut = votes - updatedVotes;
+        hoax(grantProposer);
+        token.transfer(address(100), balanceOut);
+        assertEq(token.balanceOf(grantProposer), updatedVotes);
+        // setup event
+        vm.expectEmit(false, false, false, false);
+        emit ProposalCanceled(proposalId);
+    
+        // execute
+        hoax(randomAcct);
+        serpentor.cancel(proposalId);
+        state = serpentor.ordinalState(proposalId);
+        Proposal memory updatedProposal = serpentor.proposals(proposalId);
+
+        // asserts
+        assertTrue(updatedProposal.canceled);
+        assertEq(state,uint8(ProposalState.CANCELED));
+    }
+
+    function testSetWhitelistedAccountAsQueen(address randomAcct, uint256 expiration) public {
+        // setup
+        vm.assume(randomAcct != knight && randomAcct != address(timelock) && randomAcct != whitelistedProposer);
+        vm.assume(expiration > block.timestamp + 10 days && expiration < type(uint128).max);
+        
+        // execute
+        hoax(address(timelock));
+        serpentor.setWhitelistAccountExpiration(randomAcct, expiration);
+
+        // assert
+        assertTrue(serpentor.isWhitelisted(randomAcct));
+    }
+
+    function testSetWhitelistedAccountAsKnight(address randomAcct, uint256 expiration) public {
+        // setup
+        vm.assume(randomAcct != knight && randomAcct != address(timelock) && randomAcct != whitelistedProposer);
+        vm.assume(expiration > block.timestamp + 10 days && expiration < type(uint128).max);
+        
+        // execute
+        hoax(address(knight));
+        serpentor.setWhitelistAccountExpiration(randomAcct, expiration);
+
+        // assert
+        assertTrue(serpentor.isWhitelisted(randomAcct));
+    }
+
+    function testCannotSetWhitelistedAccount(address randomAcct, uint256 expiration) public {
+        // setup
+        vm.assume(randomAcct != knight && randomAcct != address(timelock));
+        vm.assume(expiration > block.timestamp + 10 days && expiration < type(uint128).max);
+        
+        // execute
+        vm.expectRevert(bytes("!access"));
+        hoax(address(randomAcct));
+        serpentor.setWhitelistAccountExpiration(randomAcct, expiration);
+    }
 }
