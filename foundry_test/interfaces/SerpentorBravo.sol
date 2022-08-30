@@ -56,4 +56,5 @@ interface SerpentorBravo {
     function setPendingQueen(address newQueen) external;
     function acceptThrone() external;
     function propose(ProposalAction[] calldata actions, string calldata description) external returns (uint256);
+    function cancel(uint256 proposalId) external;
 }

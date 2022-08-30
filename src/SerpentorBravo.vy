@@ -41,12 +41,12 @@ struct Transaction:
     target: address
     # @notice The value (i.e. msg.value) to be passed to the calls to be made
     amount: uint256
+    # @notice The estimated time for execution of the trx
+    eta: uint256
     # @notice The function signature to be called
     signature: String[METHOD_SIG_SIZE]
     # @notice The calldata to be passed to the call
     callData: Bytes[CALL_DATA_LEN]
-    # @notice The estimated time for execution of the trx
-    eta: uint256
 
 interface Timelock:
     def delay() -> uint256: view
@@ -325,7 +325,7 @@ def queue(proposalId: uint256):
     eta: uint256 = block.timestamp + Timelock(self.timelock).delay()
     for action in proposal.actions:
         self._queueOrRevertInternal(action, eta)    
-    proposal.eta = eta
+    self.proposals[proposalId].eta = eta
     log ProposalQueued(proposalId, eta)
 
 @external
@@ -336,7 +336,7 @@ def execute(proposalId: uint256):
     """
     assert self._state(proposalId) == ProposalState.QUEUED, "!queued"
     proposal: Proposal = self.proposals[proposalId]
-    proposal.executed = True
+    self.proposals[proposalId].executed = True
     for action in proposal.actions:
         trx: Transaction = self._buildTrx(action, proposal.eta)   
         Timelock(self.timelock).executeTransaction(trx)
@@ -361,9 +361,9 @@ def cancel(proposalId: uint256):
         else:
             assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) < self.proposalThreshold, "!threshold"
 
-    proposal.canceled = True
+    self.proposals[proposalId].canceled = True
     for action in proposal.actions:
-        trx: Transaction = self._buildTrx(action, proposal.eta)   
+        trx: Transaction = self._buildTrx(action, proposal.eta) 
         Timelock(self.timelock).cancelTransaction(trx)
 
     log ProposalCanceled(proposalId)
@@ -586,9 +586,9 @@ def _buildTrx(action: ProposalAction, eta: uint256) -> Transaction:
     timelockTrx: Transaction = Transaction({
         target: action.target,
         amount: action.amount,
+        eta: eta,
         signature: action.signature,
         callData: action.callData,
-        eta: eta
     })
 
     return timelockTrx
@@ -628,9 +628,9 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     elif support == 2:
         proposal.abstainVotes += votes
 
-    receipt.hasVoted = True
-    receipt.support = support
-    receipt.votes = votes
+    self.receipts[proposalId][voter].hasVoted = True
+    self.receipts[proposalId][voter].support = support
+    self.receipts[proposalId][voter].votes = votes
 
     return votes
 

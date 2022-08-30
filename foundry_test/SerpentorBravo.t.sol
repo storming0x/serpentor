@@ -21,7 +21,7 @@ contract SerpentorBravoTest is ExtendedTest {
     uint public constant MAXIMUM_DELAY = 30 days;
     uint public constant VOTING_PERIOD = 5760; // about 24 hours
     uint public constant THRESHOLD = 100e18;
-    uint public constant QUORUM_VOTES = 1000e18;
+    uint public constant QUORUM_VOTES = 500e18;
     uint public constant VOTING_DELAY = 20000;
     uint8 public constant DECIMALS = 18;
     uint public delay = 2 days;
@@ -30,8 +30,9 @@ contract SerpentorBravoTest is ExtendedTest {
     address public proposer = address(2);
     address public smallVoter = address(3);
     address public mediumVoter = address(4);
-    address public whaleVoter = address(5);
-    address public whitelistedProposer = address(6);
+    address public whaleVoter1 = address(5);
+    address public whaleVoter2 = address(6);
+    address public whitelistedProposer = address(7);
 
     // events
     event ProposalCreated(
@@ -42,6 +43,8 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 endBlock,
         string description
     );
+
+    event ProposalCanceled(uint256 proposalId);
   
     function setUp() public {
         // deploy token
@@ -69,18 +72,28 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.label(address(serpentor), "SerpentorBravo");
         vm.label(address(timelock), "Timelock");
         vm.label(address(token), "Token");
+        vm.label(proposer, "proposer");
+        vm.label(smallVoter, "smallVoter");
+        vm.label(mediumVoter, "mediumVoter");
+        vm.label(whaleVoter1, "whaleVoter1");
+        vm.label(whaleVoter2, "whaleVoter2");
 
-        // hand over control to queen
+        // setup coupled governance between serpentor and timelock
         hoax(address(vyperDeployer));
-        serpentor.setPendingQueen(queen);
-        hoax(queen);
+        serpentor.setPendingQueen(address(timelock));
+        hoax(address(timelock));
         serpentor.acceptThrone();
+        hoax(address(timelock));
+        timelock.setPendingQueen(address(serpentor));
+        hoax(address(serpentor));
+        timelock.acceptThrone();
 
         // setup voting balances
         deal(address(token), proposer, THRESHOLD + 1);
         deal(address(token), smallVoter, 1e18);
         deal(address(token), mediumVoter, 10e18);
-        deal(address(token), whaleVoter, 200e18);
+        deal(address(token), whaleVoter1, 300e18);
+        deal(address(token), whaleVoter2, 250e18);
         deal(address(token), address(serpentor), 1000e18);
     }
 
@@ -96,14 +109,16 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(serpentor.proposalThreshold(), THRESHOLD);
         assertEq(serpentor.quorumVotes(), QUORUM_VOTES);
         assertEq(serpentor.initialProposalId(), 0);
-        assertEq(serpentor.queen(), queen);
+        assertEq(serpentor.queen(), address(timelock));
         assertEq(serpentor.pendingQueen(), address(0));
+        assertEq(timelock.queen(), address(serpentor));
         // check tests have correct starting balance of tokens
         assertEq(token.balanceOf(address(this)), 30000 * 10**uint256(DECIMALS));
         assertEq(token.balanceOf(proposer), THRESHOLD + 1);
         assertEq(token.balanceOf(smallVoter), 1e18);
         assertEq(token.balanceOf(mediumVoter), 10e18);
-        assertEq(token.balanceOf(whaleVoter), 200e18);
+        assertEq(token.balanceOf(whaleVoter1), 300e18);
+        assertEq(token.balanceOf(whaleVoter2), 250e18);
         assertEq(token.balanceOf(whitelistedProposer), 0);
     }
 
@@ -306,6 +321,54 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.expectRevert(bytes("!latestPropId_state"));
         hoax(grantProposer);
         serpentor.propose(secondProposalActions, "send second grant to contributor");
+    }
+
+    function testShouldCancelWhenSenderIsProposerAndProposalActive(uint256 votes) public {
+        uint256 threshold = serpentor.proposalThreshold();
+        // if maxActions is a big number, tests runs out of gas
+        vm.assume(votes > threshold && votes < type(uint128).max);
+        // setup
+        address grantProposer = address(0xBEEF);
+        address grantee = address(0xABCD);
+        uint256 transferAmount = 1e18;
+        deal(address(token), grantProposer, votes);
+    
+        skip(2 days);
+        assertEq(token.getPriorVotes(grantProposer, block.number), votes);
+        // transfer 1e18 token to grantee
+        bytes memory callData = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+
+        ProposalAction memory testAction = ProposalAction({
+            target: address(token),
+            amount: 0,
+            signature: "",
+            callData: callData
+        });
+
+        ProposalAction[] memory proposalActions = new ProposalAction[](1);
+        proposalActions[0] = testAction;
+    
+        // setup proposal
+        hoax(grantProposer);
+        uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
+        console.log("proposalId", proposalId);
+        // increase block.number after startBlock
+        vm.roll(serpentor.votingDelay() + 2);
+        uint8 state = serpentor.ordinalState(proposalId);
+        assertEq(state,uint8(ProposalState.ACTIVE));
+        // setup event
+        vm.expectEmit(false, false, false, false);
+        emit ProposalCanceled(proposalId);
+
+        // execute
+        hoax(grantProposer);
+        serpentor.cancel(proposalId);
+        state = serpentor.ordinalState(proposalId);
+        Proposal memory updatedProposal = serpentor.proposals(proposalId);
+
+        // asserts
+        assertTrue(updatedProposal.canceled);
+        assertEq(state,uint8(ProposalState.CANCELED));
     }
 
 
