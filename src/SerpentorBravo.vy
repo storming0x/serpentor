@@ -617,7 +617,7 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     assert support <= 2, "!vote_type" # @dev can we use enums instead?
     proposal: Proposal = self.proposals[proposalId]
     receipt: Receipt = self._getReceipt(proposalId, voter)
-    assert receipt.hasVoted == False, "hasVoted"
+    assert receipt.hasVoted == False, "!hasVoted"
     # @dev use min of current block and proposal startBlock instead ?
     votes:uint256 = GovToken(self.token).getPriorVotes(msg.sender, proposal.startBlock)
     
