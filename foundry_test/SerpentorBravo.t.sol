@@ -25,6 +25,12 @@ contract SerpentorBravoTest is ExtendedTest {
     uint public constant GRACE_PERIOD = 14 days;
     uint public constant MINIMUM_DELAY = 1;
     uint public constant MAXIMUM_DELAY = 40320;
+    uint public constant MIN_VOTING_PERIOD = 5760; // about 24 hours
+    uint public constant MAX_VOTING_PERIOD = 80640; // 2 weeks
+
+    uint public constant MIN_PROPOSAL_THRESHOLD = 100e18; 
+    uint public constant MAX_PROPOSAL_THRESHOLD = 5000e18; // 2 weeks
+
     uint public constant VOTING_PERIOD = 5760; // about 24 hours
     uint public constant THRESHOLD = 100e18;
     uint public constant QUORUM_VOTES = 500e18;
@@ -67,6 +73,8 @@ contract SerpentorBravoTest is ExtendedTest {
     );
 
     event VotingDelaySet(uint256 oldVotingDelay, uint256 newVotingDelay);
+    event VotingPeriodSet(uint256 oldVotingPeriod, uint256 newVotingPeriod);
+    event ProposalThresoldSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
 
     event NewQueen(address indexed oldQueen, address indexed newQueen);
     event NewKnight(address indexed oldKnight, address indexed newKnight);    
@@ -606,6 +614,80 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(actions[0].callData, expectedActions[0].callData);
     }
 
+    function testRandomAcctCannotSetVotingPeriod(address random, uint256 newVotingPeriod) public {
+        vm.assume(isNotReservedAddress(random));
+        vm.assume(newVotingPeriod >= MIN_VOTING_PERIOD && newVotingPeriod <= MAX_VOTING_PERIOD);
+        // setup
+        vm.expectRevert(bytes("!queen"));
+        // execute
+        vm.prank(random);
+        serpentor.setVotingPeriod(newVotingPeriod);
+    }
+
+    function testCannotSetVotingPeriodOutsideRange(address random, uint32 newVotingPeriod) public {
+        vm.assume(isNotReservedAddress(random));
+        vm.assume(newVotingPeriod == 0 || newVotingPeriod == 1 || newVotingPeriod > MAX_VOTING_PERIOD);
+        address currentQueen = serpentor.queen();
+        // setup
+        vm.expectRevert(bytes("!votingPeriod"));
+        // execute
+        hoax(currentQueen);
+        serpentor.setVotingPeriod(newVotingPeriod);
+    }
+
+    function testShouldSetVotingPeriod(address random, uint256 newVotingPeriod) public {
+        vm.assume(isNotReservedAddress(random));
+        vm.assume(newVotingPeriod >= MIN_VOTING_PERIOD && newVotingPeriod <= MAX_VOTING_PERIOD);
+        // setup
+        address currentQueen = serpentor.queen();
+        uint256 oldVotingPeriod = serpentor.votingPeriod();
+        // setup event
+        vm.expectEmit(false, false, false, false);
+        emit VotingPeriodSet(oldVotingPeriod, newVotingPeriod);
+        // execute
+        vm.prank(currentQueen);
+        serpentor.setVotingPeriod(newVotingPeriod);
+
+        // asserts
+        assertEq(serpentor.votingPeriod(), newVotingPeriod);
+    }
+
+    function testRandomAcctCannotSetProposalThreshold(address random, uint256 newProposalThreshold) public {
+        vm.assume(isNotReservedAddress(random));
+        vm.assume(newProposalThreshold >= MIN_PROPOSAL_THRESHOLD && newProposalThreshold <= MAX_PROPOSAL_THRESHOLD);
+        // setup
+        vm.expectRevert(bytes("!queen"));
+        // execute
+        hoax(random);
+        serpentor.setProposalThreshold(newProposalThreshold);
+    }
+
+    function testCannotSetProposalThresholdOutsideRange(uint32 newProposalThreshold) public {
+        vm.assume(newProposalThreshold == 0 || newProposalThreshold == 1 || newProposalThreshold > MAX_PROPOSAL_THRESHOLD);
+        address currentQueen = serpentor.queen();
+        // setup
+        vm.expectRevert(bytes("!threshold"));
+        // execute
+        hoax(currentQueen);
+        serpentor.setProposalThreshold(newProposalThreshold);
+    }
+
+    function testShouldSetProposalThreshold(uint256 newProposalThreshold) public {
+        vm.assume(newProposalThreshold >= MIN_PROPOSAL_THRESHOLD && newProposalThreshold <= MAX_PROPOSAL_THRESHOLD);
+        // setup
+        address currentQueen = serpentor.queen();
+        uint256 oldProposalThreshold = serpentor.proposalThreshold();
+        // setup event
+        vm.expectEmit(false, false, false, false);
+        emit ProposalThresoldSet(oldProposalThreshold, newProposalThreshold);
+        // execute
+        vm.prank(currentQueen);
+        serpentor.setProposalThreshold(newProposalThreshold);
+
+        // asserts
+        assertEq(serpentor.proposalThreshold(), newProposalThreshold);
+    }
+
     function testRandomAcctCannotSetNewQueen(address random) public {
         vm.assume(isNotReservedAddress(random));
         // setup
@@ -670,7 +752,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testCannotSetVotingDelayOutsideRange(address random, uint32 newVotingDelay) public {
         vm.assume(isNotReservedAddress(random));
-        vm.assume(newVotingDelay > MAXIMUM_DELAY);
+        vm.assume(newVotingDelay == 0 || newVotingDelay > MAXIMUM_DELAY);
         // setup
         address currentQueen = serpentor.queen();
         vm.expectRevert(bytes("!votingDelay"));

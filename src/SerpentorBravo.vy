@@ -443,7 +443,7 @@ def setProposalThreshold(newProposalThreshold: uint256):
     @notice Admin function for setting the proposal threshold
     @param newProposalThreshold must be in required range
     """
-    assert msg.sender == self, "!queen"
+    assert msg.sender == self.queen, "!queen"
     assert newProposalThreshold >= MIN_PROPOSAL_THRESHOLD and newProposalThreshold <= MAX_PROPOSAL_THRESHOLD, "!threshold"
     oldProposalThreshold: uint256 = self.proposalThreshold
     self.proposalThreshold = newProposalThreshold

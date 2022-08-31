@@ -73,5 +73,6 @@ interface SerpentorBravo {
     function vote(uint256 proposalId, uint8 support) external;
     function voteWithReason(uint256 proposalId, uint8 support, string calldata reason) external;
     function setVotingDelay(uint256 votingDelay) external;
-    
+    function setVotingPeriod(uint256 votingPeriod) external;
+    function setProposalThreshold(uint256 proposalThreshold) external;
 }
