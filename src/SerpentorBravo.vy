@@ -622,11 +622,11 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     votes:uint256 = GovToken(self.token).getPriorVotes(msg.sender, proposal.startBlock)
     
     if support == 0:
-        proposal.againstVotes += votes
+        self.proposals[proposalId].againstVotes += votes
     elif support == 1:
-        proposal.forVotes += votes
+        self.proposals[proposalId].forVotes += votes
     elif support == 2:
-        proposal.abstainVotes += votes
+        self.proposals[proposalId].abstainVotes += votes
 
     self.receipts[proposalId][voter].hasVoted = True
     self.receipts[proposalId][voter].support = support

@@ -35,6 +35,12 @@ struct Proposal {
     bool executed;
 }
 
+struct Receipt {
+    bool hasVoted;
+    uint8 support;
+    uint256 votes;
+}
+
 interface SerpentorBravo {
     // view functions
     function queen() external view returns (address);
@@ -54,6 +60,7 @@ interface SerpentorBravo {
     function state(uint256 proposalId) external view returns (ProposalState);
     function ordinalState(uint256 proposalId) external view returns (uint8);
     function isWhitelisted(address account) external view returns (bool);
+    function getReceipt(uint256 proposalId, address voter) external view returns (Receipt memory);
 
     // state changing funcs
     function setPendingQueen(address newQueen) external;
@@ -62,5 +69,7 @@ interface SerpentorBravo {
     function cancel(uint256 proposalId) external;
     function setWhitelistAccountExpiration(address account, uint256 expiration) external;
     function setKnight(address newKnight) external;
+    function vote(uint256 proposalId, uint8 support) external;
+    function voteWithReason(uint256 proposalId, uint8 support, string calldata reason) external;
     
 }
