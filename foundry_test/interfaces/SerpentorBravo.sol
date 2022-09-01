@@ -62,6 +62,7 @@ interface SerpentorBravo {
     function isWhitelisted(address account) external view returns (bool);
     function getReceipt(uint256 proposalId, address voter) external view returns (Receipt memory);
     function getActions(uint256 proposalId) external view returns (ProposalAction[] memory);
+    function domainSeparator() external view returns (bytes32);
 
     // state changing funcs
     function setPendingQueen(address newQueen) external;
@@ -72,8 +73,10 @@ interface SerpentorBravo {
     function setKnight(address newKnight) external;
     function vote(uint256 proposalId, uint8 support) external;
     function voteWithReason(uint256 proposalId, uint8 support, string calldata reason) external;
+    function voteBySig(uint256 proposalId, uint8 support, uint8 v, bytes32 r, bytes32 s) external;
     function setVotingDelay(uint256 votingDelay) external;
     function setVotingPeriod(uint256 votingPeriod) external;
     function setProposalThreshold(uint256 proposalThreshold) external;
     function queue(uint256 proposalId) external;
+    function execute(uint256 proposalId) external;
 }
