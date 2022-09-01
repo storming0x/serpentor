@@ -574,6 +574,15 @@ def getReceipt(proposalId: uint256, voter: address) -> Receipt:
     """
     return self._getReceipt(proposalId, voter)
 
+@external
+@view 
+def domainSeparator() -> bytes32:
+    """
+    @notice Gets the domain separator
+    @return Domain separator of contract
+    """
+    return self._domainSeparator()
+
 @internal
 def _queueOrRevertInternal(action: ProposalAction, eta: uint256):
     trxHash: bytes32 = keccak256(_abi_encode(action.target, action.amount, action.signature, action.callData, eta))
@@ -594,6 +603,7 @@ def _buildTrx(action: ProposalAction, eta: uint256) -> Transaction:
     return timelockTrx
 
 @internal
+@view
 def _domainSeparator() -> bytes32:
     return keccak256(
         concat(
@@ -619,7 +629,7 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     receipt: Receipt = self._getReceipt(proposalId, voter)
     assert receipt.hasVoted == False, "!hasVoted"
     # @dev use min of current block and proposal startBlock instead ?
-    votes:uint256 = GovToken(self.token).getPriorVotes(msg.sender, proposal.startBlock)
+    votes:uint256 = GovToken(self.token).getPriorVotes(voter, proposal.startBlock)
     
     if support == 0:
         self.proposals[proposalId].againstVotes += votes
