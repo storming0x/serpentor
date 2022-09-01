@@ -417,7 +417,7 @@ contract SerpentorBravoTest is ExtendedTest {
         // setup
         vm.assume(_noReservedAddress(voters));
         vm.assume(_noDuplicates(voters));
-        address grantProposer = address(0xBEEF);
+        address grantProposer = proposer;
         address random = address(0xdeadbeef);
 
         uint256 threshold = serpentor.proposalThreshold();
