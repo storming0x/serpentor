@@ -659,15 +659,16 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testShouldVoteBySig(
         uint256 votes, 
-        uint8 support
+        uint8 support,
+        // private key needs to be lower than uint256 for secp256k1
+        uint248 voterPrivateKey
     ) public {
         // setup
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > 1000000 && votes < type(uint256).max);
         vm.assume(support <= 2);
-        // vm.assume(voterPrivateKey > 0 && voterPrivateKey < type(uint256).max);
+        vm.assume(voterPrivateKey > 0);
         // generate voter from privateKey
-        uint256 voterPrivateKey = 0xA11CE;
         address voter = vm.addr(voterPrivateKey);
         vm.assume(_isNotReservedAddress(voter));
       
