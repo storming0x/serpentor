@@ -55,7 +55,7 @@ contract SerpentorBravoTest is ExtendedTest {
     mapping(address => bool) public reserved;
     mapping(address => bool) public isVoter; // for tracking duplicates in fuzzing
 
-    address[] reservedList;
+    address[] public reservedList;
 
     // events
     event ProposalCreated(
@@ -123,7 +123,7 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.label(whitelistedProposer, "whitelistedProposer");
         vm.label(grantee, "grantee");
 
-        setupReservedAddress();
+        _setupReservedAddress();
 
         // setup coupled governance between serpentor and timelock
         hoax(address(vyperDeployer));
@@ -214,7 +214,6 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(votes > threshold && size >= maxActions && size <= maxActions + 5);
         // setup
         address yoloProposer = address(0xBEEF);
-        uint256 transferAmount = 1e18;
         deal(address(token), yoloProposer, votes);
     
         skip(2 days);
@@ -246,7 +245,7 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(votes > threshold && votes < type(uint128).max);
         // setup
         address grantProposer = address(0xBEEF);
-        ProposalAction[] memory actions = setupTestProposal(grantProposer, votes);
+        ProposalAction[] memory actions = _setupTestProposal(grantProposer, votes);
         //setup for event checks
         uint256 expectedStartBlock = block.number + serpentor.votingDelay();
         uint256 expectedEndBlock = expectedStartBlock + serpentor.votingPeriod();
@@ -282,7 +281,7 @@ contract SerpentorBravoTest is ExtendedTest {
          
         // setup first proposal
         address grantProposer = address(0xBEEF);
-        ProposalAction[] memory firstProposalActions = setupTestProposal(grantProposer, votes);
+        ProposalAction[] memory firstProposalActions = _setupTestProposal(grantProposer, votes);
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(firstProposalActions, "send grant to contributor");
         uint8 state = serpentor.ordinalState(proposalId);
@@ -304,7 +303,7 @@ contract SerpentorBravoTest is ExtendedTest {
           
         // setup first proposal
         address grantProposer = address(0xBEEF);
-        ProposalAction[] memory firstProposalActions = setupTestProposal(grantProposer, votes);
+        ProposalAction[] memory firstProposalActions = _setupTestProposal(grantProposer, votes);
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(firstProposalActions, "send grant to contributor");
         // increase block.number after startBlock
@@ -322,10 +321,10 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testShouldCancelWhenSenderIsProposerAndProposalActive(uint256 votes, address grantProposer) public {
         uint256 threshold = serpentor.proposalThreshold();
-        vm.assume(isNotReservedAddress(grantProposer));
+        vm.assume(_isNotReservedAddress(grantProposer));
         vm.assume(votes > threshold && votes < type(uint128).max);
         // setup proposal
-        ProposalAction[] memory proposalActions = setupTestProposal(grantProposer, votes);
+        ProposalAction[] memory proposalActions = _setupTestProposal(grantProposer, votes);
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
         // increase block.number after startBlock
@@ -353,14 +352,14 @@ contract SerpentorBravoTest is ExtendedTest {
         address randomAcct
     ) public {
         vm.assume(randomAcct != grantProposer);
-        vm.assume(isNotReservedAddress(randomAcct));
-        vm.assume(isNotReservedAddress(grantProposer));
+        vm.assume(_isNotReservedAddress(randomAcct));
+        vm.assume(_isNotReservedAddress(grantProposer));
         uint256 threshold = serpentor.proposalThreshold();
         // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && votes < type(uint128).max);
         // setup proposal
  
-        ProposalAction[] memory proposalActions = setupTestProposal(grantProposer, votes);
+        ProposalAction[] memory proposalActions = _setupTestProposal(grantProposer, votes);
     
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(proposalActions, "send grant to contributor");
@@ -382,14 +381,14 @@ contract SerpentorBravoTest is ExtendedTest {
         address grantProposer,
         address randomAcct
     ) public {
-        vm.assume(isNotReservedAddress(randomAcct));
-        vm.assume(isNotReservedAddress(grantProposer));
+        vm.assume(_isNotReservedAddress(randomAcct));
+        vm.assume(_isNotReservedAddress(grantProposer));
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > threshold && votes < type(uint128).max);
         vm.assume(updatedVotes < threshold);
         // setup proposal
-        ProposalAction[] memory proposalActions = setupTestProposal(grantProposer, votes);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, grantProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(grantProposer, votes);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, grantProposer);
 
         // proposer goes below
         uint256 balanceOut = votes - updatedVotes;
@@ -416,7 +415,7 @@ contract SerpentorBravoTest is ExtendedTest {
         address[ARR_SIZE] memory voters
     ) public {
         // setup
-        vm.assume(noReservedAddress(voters));
+        vm.assume(_noReservedAddress(voters));
         vm.assume(_noDuplicates(voters));
         address grantProposer = address(0xBEEF);
         address random = address(0xdeadbeef);
@@ -425,8 +424,8 @@ contract SerpentorBravoTest is ExtendedTest {
         // setup proposal
         uint256 expectedETA;
         uint256 proposalId;
-        ProposalAction[] memory proposalActions = setupTestProposal(grantProposer, threshold + 1);
-        (proposalId, expectedETA) = submitQueuedTestProposal(voters, proposalActions, grantProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(grantProposer, threshold + 1);
+        (proposalId, expectedETA) = _submitQueuedTestProposal(voters, proposalActions, grantProposer);
         Proposal memory proposal = serpentor.proposals(proposalId);
         bytes32 expectedTxHash = _getTrxHash(proposal.actions[0], expectedETA);
         uint256 proposerBalance = token.balanceOf(grantProposer);
@@ -453,10 +452,10 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > threshold && votes < type(uint128).max);
         vm.assume(updatedVotes < threshold);
-        vm.assume(isNotReservedAddress(randomAcct));
+        vm.assume(_isNotReservedAddress(randomAcct));
         // setup
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, votes);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, votes);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
 
         // proposer goes below
         uint256 balanceOut = votes - updatedVotes;
@@ -480,8 +479,8 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(votes > threshold && votes < type(uint128).max);
         vm.assume(updatedVotes < threshold);
         // setup
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, votes);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, votes);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
 
         // proposer goes below
         uint256 balanceOut = votes - updatedVotes;
@@ -507,7 +506,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testSetWhitelistedAccountAsQueen(address randomAcct, uint256 expiration) public {
         // setup
-        vm.assume(isNotReservedAddress(randomAcct));
+        vm.assume(_isNotReservedAddress(randomAcct));
         vm.assume(expiration > block.timestamp + 10 days && expiration < type(uint128).max);
         
         // execute
@@ -520,7 +519,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testSetWhitelistedAccountAsKnight(address randomAcct, uint256 expiration) public {
         // setup
-        vm.assume(isNotReservedAddress(randomAcct));
+        vm.assume(_isNotReservedAddress(randomAcct));
         vm.assume(expiration > block.timestamp + 10 days && expiration < type(uint128).max);
         
         // execute
@@ -533,7 +532,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testCannotSetWhitelistedAccount(address randomAcct, uint256 expiration) public {
         // setup
-        vm.assume(isNotReservedAddress(randomAcct));
+        vm.assume(_isNotReservedAddress(randomAcct));
         vm.assume(expiration > block.timestamp + 10 days && expiration < type(uint128).max);
         
         // execute
@@ -545,11 +544,11 @@ contract SerpentorBravoTest is ExtendedTest {
     function testCannotVoteWithInvalidOption(uint256 votes, address voter, uint8 support) public {
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > threshold && votes < type(uint128).max);
-        vm.assume(isNotReservedAddress(voter));
+        vm.assume(_isNotReservedAddress(voter));
         vm.assume(support > 2);
         // setup
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, votes);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, votes);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
         vm.expectRevert(bytes("!vote_type"));
 
         // execute
@@ -560,11 +559,11 @@ contract SerpentorBravoTest is ExtendedTest {
      function testCannotVoteMoreThanOnce(uint256 votes, address voter, uint8 support) public {
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > threshold && votes < type(uint128).max);
-        vm.assume(isNotReservedAddress(voter));
+        vm.assume(_isNotReservedAddress(voter));
         vm.assume(support <= 2);
         // setup
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, votes);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, votes);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
         // vote first time
         hoax(voter);
         serpentor.vote(proposalId, support); 
@@ -578,11 +577,11 @@ contract SerpentorBravoTest is ExtendedTest {
     function testCannotVoteOnInactiveProposal(uint256 votes, address voter, uint8 support) public {
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > threshold && votes < type(uint128).max);
-        vm.assume(isNotReservedAddress(voter));
+        vm.assume(_isNotReservedAddress(voter));
         vm.assume(support <= 2);
         // setup
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, votes);
-        uint256 proposalId = submitPendingTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, votes);
+        uint256 proposalId = _submitPendingTestProposal(proposalActions, whitelistedProposer);
         vm.expectRevert(bytes("!active"));
         
         // execute
@@ -598,14 +597,14 @@ contract SerpentorBravoTest is ExtendedTest {
         // setup
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > 1000000 && votes < type(uint256).max);
-        vm.assume(isNotReservedAddress(voter));
+        vm.assume(_isNotReservedAddress(voter));
         vm.assume(support <= 2);
       
         // setup voter votes
         deal(address(token), voter, votes);
 
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
         
         // setup event
         vm.expectEmit(true, false, false, false);
@@ -621,7 +620,7 @@ contract SerpentorBravoTest is ExtendedTest {
         assertTrue(receipt.hasVoted);
         assertEq(receipt.support, support);
         assertEq(receipt.votes, votes);
-        assertVotes(proposal, votes, support);
+        _assertVotes(proposal, votes, support);
     }
 
     function testShouldVoteWithReason(
@@ -632,14 +631,14 @@ contract SerpentorBravoTest is ExtendedTest {
         // setup
         uint256 threshold = serpentor.proposalThreshold();
         vm.assume(votes > 1000000 && votes < type(uint256).max);
-        vm.assume(isNotReservedAddress(voter));
+        vm.assume(_isNotReservedAddress(voter));
         vm.assume(support <= 2);
       
         // setup voter votes
         deal(address(token), voter, votes);
 
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
         
         // setup event
         vm.expectEmit(true, false, false, false);
@@ -655,7 +654,7 @@ contract SerpentorBravoTest is ExtendedTest {
         assertTrue(receipt.hasVoted);
         assertEq(receipt.support, support);
         assertEq(receipt.votes, votes);
-        assertVotes(proposal, votes, support);
+        _assertVotes(proposal, votes, support);
     }
 
     function testShouldVoteBySig(
@@ -670,13 +669,13 @@ contract SerpentorBravoTest is ExtendedTest {
         // generate voter from privateKey
         uint256 voterPrivateKey = 0xA11CE;
         address voter = vm.addr(voterPrivateKey);
-        vm.assume(isNotReservedAddress(voter));
+        vm.assume(_isNotReservedAddress(voter));
       
         // setup voter votes
         deal(address(token), voter, votes);
 
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
         // create ballot
         SigUtils.Ballot memory ballot = SigUtils.Ballot({
             proposalId: proposalId,
@@ -703,14 +702,14 @@ contract SerpentorBravoTest is ExtendedTest {
         assertTrue(receipt.hasVoted);
         assertEq(receipt.support, support);
         assertEq(receipt.votes, votes);
-        assertVotes(proposal, votes, support);
+        _assertVotes(proposal, votes, support);
     }
 
     function testCannotQueueProposalIfNotSucceeded() public {
         // setup
         uint256 threshold = serpentor.proposalThreshold();
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
-        uint256 proposalId = submitActiveTestProposal(proposalActions, whitelistedProposer);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
+        uint256 proposalId = _submitActiveTestProposal(proposalActions, whitelistedProposer);
         // proposal still active cant be queued
         vm.expectRevert(bytes("!succeeded"));
 
@@ -723,10 +722,10 @@ contract SerpentorBravoTest is ExtendedTest {
         address[ARR_SIZE] memory voters
     ) public {
         // setup
-        vm.assume(noReservedAddress(voters));
+        vm.assume(_noReservedAddress(voters));
         vm.assume(_noDuplicates(voters));
         uint256 threshold = serpentor.proposalThreshold();
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
        
         // execute
         uint256 proposalId = _submitDefeatedTestProposal(voters, proposalActions, whitelistedProposer);
@@ -742,15 +741,15 @@ contract SerpentorBravoTest is ExtendedTest {
         address[ARR_SIZE] memory voters
     ) public {
         // setup
-        vm.assume(noReservedAddress(voters));
+        vm.assume(_noReservedAddress(voters));
         vm.assume(_noDuplicates(voters));
         uint256 threshold = serpentor.proposalThreshold();
         uint256 expectedETA;
         uint256 proposalId;
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
        
         // execute
-        (proposalId, expectedETA) = submitQueuedTestProposal(voters, proposalActions, whitelistedProposer);
+        (proposalId, expectedETA) = _submitQueuedTestProposal(voters, proposalActions, whitelistedProposer);
 
         Proposal memory proposal = serpentor.proposals(proposalId);
         bytes32 expectedTxHash = _getTrxHash(proposal.actions[0], expectedETA);
@@ -764,10 +763,10 @@ contract SerpentorBravoTest is ExtendedTest {
     function testCannotExecuteProposalIfNotQueued() public {
         // setup
         uint256 threshold = serpentor.proposalThreshold();
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
        
         // setup active proposal
-        uint256 proposalId =  submitActiveTestProposal(proposalActions, whitelistedProposer);
+        uint256 proposalId =  _submitActiveTestProposal(proposalActions, whitelistedProposer);
         vm.expectRevert(bytes("!queued"));
         // execute
         hoax(smallVoter);
@@ -778,15 +777,15 @@ contract SerpentorBravoTest is ExtendedTest {
         address[ARR_SIZE] memory voters
     ) public {
         // setup
-        vm.assume(noReservedAddress(voters));
+        vm.assume(_noReservedAddress(voters));
         vm.assume(_noDuplicates(voters));
         uint256 threshold = serpentor.proposalThreshold();
         uint256 expectedETA;
         uint256 proposalId;
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
        
         // setup queued proposal
-        (proposalId, expectedETA) = submitQueuedTestProposal(voters, proposalActions, whitelistedProposer);
+        (proposalId, expectedETA) = _submitQueuedTestProposal(voters, proposalActions, whitelistedProposer);
 
         Proposal memory proposal = serpentor.proposals(proposalId);
         bytes32 expectedTxHash = _getTrxHash(proposal.actions[0], expectedETA);
@@ -808,15 +807,15 @@ contract SerpentorBravoTest is ExtendedTest {
         address[ARR_SIZE] memory voters
     ) public {
         // setup
-        vm.assume(noReservedAddress(voters));
+        vm.assume(_noReservedAddress(voters));
         vm.assume(_noDuplicates(voters));
         uint256 threshold = serpentor.proposalThreshold();
         uint256 expectedETA;
         uint256 proposalId;
-        ProposalAction[] memory proposalActions = setupTestProposal(whitelistedProposer, threshold + 1);
+        ProposalAction[] memory proposalActions = _setupTestProposal(whitelistedProposer, threshold + 1);
        
         // setup queued proposal
-        (proposalId, expectedETA) = submitQueuedTestProposal(voters, proposalActions, whitelistedProposer);
+        (proposalId, expectedETA) = _submitQueuedTestProposal(voters, proposalActions, whitelistedProposer);
 
         Proposal memory proposal = serpentor.proposals(proposalId);
         bytes32 expectedTxHash = _getTrxHash(proposal.actions[0], expectedETA);
@@ -844,8 +843,8 @@ contract SerpentorBravoTest is ExtendedTest {
     function testGetAction() public {
         // setup
         uint256 threshold = serpentor.proposalThreshold();
-        ProposalAction[] memory expectedActions = setupTestProposal(whitelistedProposer, threshold + 1);
-        uint256 proposalId = submitActiveTestProposal(expectedActions, whitelistedProposer);
+        ProposalAction[] memory expectedActions = _setupTestProposal(whitelistedProposer, threshold + 1);
+        uint256 proposalId = _submitActiveTestProposal(expectedActions, whitelistedProposer);
 
         // execute
         ProposalAction[] memory actions = serpentor.getActions(proposalId);
@@ -859,7 +858,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testRandomAcctCannotSetVotingPeriod(address random, uint256 newVotingPeriod) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingPeriod >= MIN_VOTING_PERIOD && newVotingPeriod <= MAX_VOTING_PERIOD);
         // setup
         vm.expectRevert(bytes("!queen"));
@@ -869,7 +868,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testCannotSetVotingPeriodOutsideRange(address random, uint32 newVotingPeriod) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingPeriod == 0 || newVotingPeriod == 1 || newVotingPeriod > MAX_VOTING_PERIOD);
         address currentQueen = serpentor.queen();
         // setup
@@ -880,7 +879,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testShouldSetVotingPeriod(address random, uint256 newVotingPeriod) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingPeriod >= MIN_VOTING_PERIOD && newVotingPeriod <= MAX_VOTING_PERIOD);
         // setup
         address currentQueen = serpentor.queen();
@@ -897,7 +896,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testRandomAcctCannotSetProposalThreshold(address random, uint256 newProposalThreshold) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         vm.assume(newProposalThreshold >= MIN_PROPOSAL_THRESHOLD && newProposalThreshold <= MAX_PROPOSAL_THRESHOLD);
         // setup
         vm.expectRevert(bytes("!queen"));
@@ -933,7 +932,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testRandomAcctCannotSetNewQueen(address random) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         // setup
         vm.expectRevert(bytes("!queen"));
         // execute
@@ -942,7 +941,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testRandomAcctCannotTakeOverThrone(address random) public {
-       vm.assume(isNotReservedAddress(random));
+       vm.assume(_isNotReservedAddress(random));
         // setup
         vm.expectRevert(bytes("!pendingQueen"));
         // execute
@@ -952,7 +951,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testOnlyPendingQueenCanAcceptThrone(address futureQueen) public {
         // setup
-        vm.assume(isNotReservedAddress(futureQueen));
+        vm.assume(_isNotReservedAddress(futureQueen));
         address oldQueen = serpentor.queen();
         // setup pendingQueen
         vm.prank(address(timelock));
@@ -972,7 +971,7 @@ contract SerpentorBravoTest is ExtendedTest {
     } 
 
     function testRandomAcctCannotSetNewKnight(address random) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         // setup
         vm.expectRevert(bytes("!queen"));
         // execute
@@ -981,7 +980,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testSetNewKnight(address newKnight) public {
-        vm.assume(isNotReservedAddress(newKnight));
+        vm.assume(_isNotReservedAddress(newKnight));
         address currentQueen = serpentor.queen();
         address oldKnight = serpentor.knight();
 
@@ -995,7 +994,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testCannotSetVotingDelayOutsideRange(address random, uint32 newVotingDelay) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingDelay == 0 || newVotingDelay > MAXIMUM_DELAY);
         // setup
         address currentQueen = serpentor.queen();
@@ -1006,7 +1005,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testRandomAcctCannotSetVotingDelay(address random, uint256 newVotingDelay) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingDelay >= MINIMUM_DELAY && newVotingDelay <= MAXIMUM_DELAY);
         // setup
         vm.expectRevert(bytes("!queen"));
@@ -1016,7 +1015,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
      function testShouldSetVotingDelay(address random, uint256 newVotingDelay) public {
-        vm.assume(isNotReservedAddress(random));
+        vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingDelay >= MINIMUM_DELAY && newVotingDelay <= MAXIMUM_DELAY);
         // setup
         address currentQueen = serpentor.queen();
@@ -1034,7 +1033,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     // helper methods
 
-    function setupVotingBalancesToQuorum(address[ARR_SIZE] memory voters) internal returns (uint256[ARR_SIZE] memory) {
+    function _setupVotingBalancesToQuorum(address[ARR_SIZE] memory voters) internal returns (uint256[ARR_SIZE] memory) {
         uint quorum = serpentor.quorumVotes();
         uint[ARR_SIZE] memory votes;
         for (uint i = 0; i < voters.length; i++) {
@@ -1048,7 +1047,7 @@ contract SerpentorBravoTest is ExtendedTest {
         return votes;
     }
     // NOTE: cant overflow since array is set from quorum division
-    function countVotes(uint256[ARR_SIZE] memory votes) internal returns (uint256) {
+    function _countVotes(uint256[ARR_SIZE] memory votes) internal pure returns (uint256) {
         uint256 total;
         for (uint i = 0; i < votes.length; i++) {
            total += votes[i];
@@ -1057,7 +1056,7 @@ contract SerpentorBravoTest is ExtendedTest {
         return total;
     }
 
-    function noZeroVotes(uint8[ARR_SIZE] memory votes) internal returns (bool) {
+    function _noZeroVotes(uint8[ARR_SIZE] memory votes) internal pure returns (bool) {
         for (uint i = 0; i < votes.length; i++) {
            if (votes[i] == 0) {
              return false;
@@ -1068,7 +1067,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
 
-    function setupTestProposal(
+    function _setupTestProposal(
         address grantProposer, 
         uint256 votes
     ) internal returns (ProposalAction[] memory) {
@@ -1092,18 +1091,18 @@ contract SerpentorBravoTest is ExtendedTest {
         return actions;
     }
 
-    function submitQueuedTestProposal(
+    function _submitQueuedTestProposal(
         address[ARR_SIZE] memory voters,
         ProposalAction[] memory proposalActions, 
         address _proposer
     ) internal returns (uint256 proposalId , uint256 expectedETA) {
-        uint256[ARR_SIZE] memory votes = setupVotingBalancesToQuorum(voters);
+        uint256[ARR_SIZE] memory votes = _setupVotingBalancesToQuorum(voters);
         skip(1 days);
        
-        uint256 voteCount = countVotes(votes);
+        uint256 voteCount = _countVotes(votes);
         assertTrue(voteCount > serpentor.quorumVotes());
     
-        proposalId = submitActiveTestProposal(proposalActions, _proposer);
+        proposalId = _submitActiveTestProposal(proposalActions, _proposer);
 
         _executeVoting(voters, proposalId, 1); // for
         
@@ -1127,13 +1126,13 @@ contract SerpentorBravoTest is ExtendedTest {
         ProposalAction[] memory proposalActions, 
         address _proposer
     ) internal returns (uint256 proposalId) {
-        uint256[ARR_SIZE] memory votes = setupVotingBalancesToQuorum(voters);
+        uint256[ARR_SIZE] memory votes = _setupVotingBalancesToQuorum(voters);
         skip(1 days);
        
-        uint256 voteCount = countVotes(votes);
+        uint256 voteCount = _countVotes(votes);
         assertTrue(voteCount > serpentor.quorumVotes());
     
-        proposalId = submitActiveTestProposal(proposalActions, _proposer);
+        proposalId = _submitActiveTestProposal(proposalActions, _proposer);
 
         _executeVoting(voters, proposalId, 0); // against
         
@@ -1155,7 +1154,7 @@ contract SerpentorBravoTest is ExtendedTest {
         }
     }
 
-    function submitActiveTestProposal(
+    function _submitActiveTestProposal(
         ProposalAction[] memory proposalActions, 
         address _proposer
     ) 
@@ -1171,7 +1170,7 @@ contract SerpentorBravoTest is ExtendedTest {
         return proposalId;
     }
 
-     function submitPendingTestProposal(
+     function _submitPendingTestProposal(
         ProposalAction[] memory proposalActions, 
         address _proposer
     ) 
@@ -1186,7 +1185,7 @@ contract SerpentorBravoTest is ExtendedTest {
         return proposalId;
     }
 
-    function setupReservedAddress() internal {
+    function _setupReservedAddress() internal {
         reservedList = [
             queen, 
             proposer,
@@ -1206,7 +1205,7 @@ contract SerpentorBravoTest is ExtendedTest {
              reserved[reservedList[i]] = true;
     }
 
-    function assertVotes(Proposal memory proposal, uint256 votes, uint8 support) internal {
+    function _assertVotes(Proposal memory proposal, uint256 votes, uint8 support) internal {
         if (support == 0) {
             assertEq(proposal.againstVotes, votes);
         }
@@ -1220,11 +1219,11 @@ contract SerpentorBravoTest is ExtendedTest {
 
     }
 
-    function isNotReservedAddress(address account) internal view returns (bool) {
+    function _isNotReservedAddress(address account) internal view returns (bool) {
         return !reserved[account];
     }
 
-    function noReservedAddress(address[ARR_SIZE] memory accounts) internal view returns (bool) {
+    function _noReservedAddress(address[ARR_SIZE] memory accounts) internal view returns (bool) {
         for (uint i = 0; i < accounts.length; i++)
              if (reserved[accounts[i]]) {
                 return false;
