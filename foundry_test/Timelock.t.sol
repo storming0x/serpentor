@@ -11,6 +11,9 @@ contract TimelockTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
     Timelock private timelock;
     address public queen = address(1);
+    address public holder = address(2);
+    address public grantee = address(3);
+
     uint public constant GRACE_PERIOD = 14 days;
     uint public constant MINIMUM_DELAY = 2 days;
     uint public constant MAXIMUM_DELAY = 30 days;
@@ -416,6 +419,91 @@ contract TimelockTest is ExtendedTest {
         // asserts
         assertEq(executedCalldata, callData);
         assertEq(timelock.delay(), newDelay);
+    }
+
+     function testShouldExecQueuedTrxWithTimelockEthTransferCorrectly() public {
+        // setup
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(grantee);
+        bytes memory callData;
+        uint256 amount = 10 ether;
+        string memory signature = "";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+        skip(eta + 1); // 1 pass 
+        deal(address(timelock), 11 ether);
+
+         //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        hoax(address(queen), 1 ether);
+        bytes memory executedCalldata = timelock.executeTransaction(testTrx);
+
+        // asserts
+        assertEq(executedCalldata, callData);
+        assertEq(grantee.balance, amount);
+        assertEq(address(timelock).balance, 1 ether);
+    }
+
+    function testShouldExecQueuedTrxWithCallerEthTransferCorrectly() public {
+        // setup
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(grantee);
+        bytes memory callData;
+        uint256 amount = 10 ether;
+        string memory signature = "";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+        skip(eta + 1); // 1 pass
+        assertEq(address(timelock).balance, 0);
+      
+        //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        hoax(address(queen), 10 ether);
+        bytes memory executedCalldata = timelock.executeTransaction{value: amount}(testTrx);
+
+        // asserts
+        assertEq(executedCalldata, callData);
+        assertEq(grantee.balance, amount);
+        assertEq(address(timelock).balance, 0);
+    }
+
+    function testTimelockCanReceiveEther() public {
+        // setup eth balance
+        uint256 amount = 10 ether;
+        deal(address(this), 100 ether);
+        assertEq(address(timelock).balance, 0 ether);
+
+        payable(address(timelock)).transfer(amount);
+
+        assertEq(address(timelock).balance, amount);
     }
 
 

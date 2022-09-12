@@ -83,6 +83,11 @@ def __init__(queen: address, delay: uint256):
     self.delay = delay
 
 @external
+@payable
+def __default__():
+    pass
+
+@external
 def setDelay(delay: uint256):
     """
     @notice
@@ -153,6 +158,7 @@ def cancelTransaction(trx: Transaction):
 
     log CancelTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
 
+@payable
 @external
 def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
     """
@@ -169,8 +175,6 @@ def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
 
     self.queuedTransactions[trxHash] = False
 
-    # @dev reference: https://github.com/compound-finance/compound-protocol/blob/a3214f67b73310d547e00fc578e8355911c9d376/contracts/Timelock.sol#L96
-    # TODO: check if this is the correct code for vyper based on solidity
     callData: Bytes[MAX_DATA_LEN] = b""
 
     if len(trx.signature) == 0:
