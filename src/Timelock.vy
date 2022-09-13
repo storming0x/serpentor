@@ -79,6 +79,7 @@ def __init__(queen: address, delay: uint256):
 
     assert delay >= MINIMUM_DELAY, "Delay must exceed minimum delay"
     assert delay <= MAXIMUM_DELAY, "Delay must not exceed maximum delay"
+    assert queen != empty(address), "!queen"
     self.queen = queen
     self.delay = delay
 
