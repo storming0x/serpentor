@@ -63,6 +63,7 @@ interface SerpentorBravo {
     function getReceipt(uint256 proposalId, address voter) external view returns (Receipt memory);
     function getActions(uint256 proposalId) external view returns (ProposalAction[] memory);
     function domainSeparator() external view returns (bytes32);
+    function name() external view returns (string memory);
 
     // state changing funcs
     function setPendingQueen(address newQueen) external;
