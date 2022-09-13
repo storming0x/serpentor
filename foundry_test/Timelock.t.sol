@@ -414,14 +414,49 @@ contract TimelockTest is ExtendedTest {
 
         // execute
         vm.prank(address(queen));
-        bytes memory executedCalldata = timelock.executeTransaction(testTrx);
+        bytes memory response = timelock.executeTransaction(testTrx);
 
         // asserts
-        assertEq(executedCalldata, callData);
+        assertEq(string(response), string(""));
         assertEq(timelock.delay(), newDelay);
     }
 
-     function testShouldExecQueuedTrxWithTimelockEthTransferCorrectly() public {
+    function testShouldExecQueuedTrxWithSignatureCorrectly() public {
+        // setup
+        uint256 newDelay = 5 days;
+        uint256 eta = block.timestamp + delay + 2 days;
+        address target = address(timelock);
+        bytes memory callData = abi.encode(newDelay);
+        uint256 amount = 0;
+        string memory signature = "setDelay(uint256)";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(queen));
+        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        assertTrue(timelock.queuedTransactions(trxHash));
+        skip(eta + 1); // 1 pass eta
+         //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        vm.prank(address(queen));
+        bytes memory response = timelock.executeTransaction(testTrx);
+
+        // asserts
+        assertEq(string(response), string(""));
+        assertEq(timelock.delay(), newDelay);
+    }
+
+    function testShouldExecQueuedTrxWithTimelockEthTransferCorrectly() public {
         // setup
         uint256 eta = block.timestamp + delay + 2 days;
         address target = address(grantee);
@@ -450,10 +485,9 @@ contract TimelockTest is ExtendedTest {
 
         // execute
         hoax(address(queen), 1 ether);
-        bytes memory executedCalldata = timelock.executeTransaction(testTrx);
+        timelock.executeTransaction(testTrx);
 
         // asserts
-        assertEq(executedCalldata, callData);
         assertEq(grantee.balance, amount);
         assertEq(address(timelock).balance, 1 ether);
     }
@@ -487,10 +521,9 @@ contract TimelockTest is ExtendedTest {
 
         // execute
         hoax(address(queen), 10 ether);
-        bytes memory executedCalldata = timelock.executeTransaction{value: amount}(testTrx);
+        timelock.executeTransaction{value: amount}(testTrx);
 
         // asserts
-        assertEq(executedCalldata, callData);
         assertEq(grantee.balance, amount);
         assertEq(address(timelock).balance, 0);
     }

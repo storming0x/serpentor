@@ -183,16 +183,16 @@ def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
     else: 
         # @dev use signature + data
         sig_hash: bytes32 = keccak256(trx.signature)
-        func_sig: bytes4 = convert(sig_hash, bytes4)
-        callData = _abi_encode(func_sig, trx.callData)
+        func_sig: bytes4 = convert(slice(sig_hash, 0, 4), bytes4)
+        callData = concat(func_sig, trx.callData)
 
     success: bool = False
-    response: Bytes[32] = b""
+    response: Bytes[MAX_DATA_LEN] = b""
 
     success, response = raw_call(
         trx.target,
-        trx.callData,
-        max_outsize=32,
+        callData,
+        max_outsize=MAX_DATA_LEN,
         value=trx.amount,
         revert_on_failure=False
     )
@@ -201,7 +201,7 @@ def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
 
     log ExecuteTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
 
-    return callData
+    return response
 
 
 @external
