@@ -583,6 +583,11 @@ def domainSeparator() -> bytes32:
     """
     return self._domainSeparator()
 
+@external
+@view
+def name() -> String[20]:
+    return NAME
+
 @internal
 def _queueOrRevertInternal(action: ProposalAction, eta: uint256):
     trxHash: bytes32 = keccak256(_abi_encode(action.target, action.amount, action.signature, action.callData, eta))
@@ -609,6 +614,7 @@ def _domainSeparator() -> bytes32:
         concat(
             DOMAIN_TYPE_HASH,
             keccak256(convert(NAME, Bytes[20])),
+            keccak256("1"),
             convert(chain.id, bytes32),
             convert(self, bytes32)
         )

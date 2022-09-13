@@ -207,7 +207,23 @@ contract SerpentorBravoTest is ExtendedTest {
         serpentor.propose(actions, "test proposal");
     }
 
-     function testCannotProposeTooManyActions(uint256 votes, uint8 size) public {
+    function testShouldComputeDomainSeparatorCorrectly() public {
+        // setup
+        bytes32 expectedDomainSeparator = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256(abi.encodePacked(serpentor.name())),
+            keccak256("1"),
+            block.chainid,
+            address(serpentor)
+        ));
+
+        bytes32 domainSeparator = serpentor.domainSeparator();
+
+        assertEq(domainSeparator, expectedDomainSeparator);
+
+    }
+
+    function testCannotProposeTooManyActions(uint256 votes, uint8 size) public {
         uint256 maxActions = serpentor.proposalMaxActions();
         uint256 threshold = serpentor.proposalThreshold();
         // if maxActions is a big number, tests runs out of gas
