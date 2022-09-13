@@ -125,7 +125,9 @@ pendingQueen: public(address)
 knight: public(address)
 
 # @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
-quorumVotes: public(uint256)
+QUORUM_VOTES: immutable(uint256)
+# @notice Setting for maximum number of allowed actions a proposal can execute
+PROPOSAL_MAX_ACTIONS: immutable(uint256)
 # @notice The duration of voting on a proposal, in blocks
 votingPeriod: public(uint256)
 # @notice The delay before voting on a proposal may take place, once proposed, in blocks
@@ -136,8 +138,6 @@ proposalThreshold: public(uint256)
 timelock: public(address)
 # @notice The address of the governance token
 token: public(address)
-# @notice Setting for maximum number of allowed actions a proposal can execute
-proposalMaxActions: public(uint256)
 # @notice The total number of proposals
 proposalCount: public(uint256)
 # @notice Initial proposal id set at deployment time
@@ -260,11 +260,10 @@ def __init__(
     self.votingPeriod = votingPeriod
     self.votingDelay = votingDelay
     self.proposalThreshold = proposalThreshold
-    self.quorumVotes = quorumVotes
     self.initialProposalId = initialProposalId
     self.proposalCount = initialProposalId
-    self.proposalMaxActions = 10
-
+    PROPOSAL_MAX_ACTIONS = 10
+    QUORUM_VOTES = quorumVotes
 
 @external
 def propose(
@@ -282,7 +281,7 @@ def propose(
     assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
 
     assert len(actions) != 0, "!no_actions"
-    assert len(actions) < self.proposalMaxActions, "!too_many_actions"
+    assert len(actions) < PROPOSAL_MAX_ACTIONS, "!too_many_actions"
 
     latestProposalId: uint256 =  self.latestProposalIds[msg.sender]
     if latestProposalId != 0:
@@ -323,9 +322,8 @@ def queue(proposalId: uint256):
     @param proposalId The id of the proposal to queue
     """
     assert self._state(proposalId) == ProposalState.SUCCEEDED, "!succeeded"
-    proposal: Proposal = self.proposals[proposalId]
     eta: uint256 = block.timestamp + Timelock(self.timelock).delay()
-    for action in proposal.actions:
+    for action in self.proposals[proposalId].actions:
         self._queueOrRevertInternal(action, eta)    
     self.proposals[proposalId].eta = eta
     log ProposalQueued(proposalId, eta)
@@ -337,10 +335,10 @@ def execute(proposalId: uint256):
     @param proposalId The id of the proposal to execute
     """
     assert self._state(proposalId) == ProposalState.QUEUED, "!queued"
-    proposal: Proposal = self.proposals[proposalId]
+    proposalEta: uint256 = self.proposals[proposalId].eta
     self.proposals[proposalId].executed = True
-    for action in proposal.actions:
-        trx: Transaction = self._buildTrx(action, proposal.eta)   
+    for action in self.proposals[proposalId].actions:
+        trx: Transaction = self._buildTrx(action, proposalEta)   
         Timelock(self.timelock).executeTransaction(trx)
     
     log ProposalExecuted(proposalId)
@@ -352,9 +350,9 @@ def cancel(proposalId: uint256):
     @param proposalId The id of the proposal to cancel
     """ 
     assert self._state(proposalId) != ProposalState.EXECUTED, "!cancel_executed"
-    proposal: Proposal = self.proposals[proposalId]
     # proposer can cancel
-    proposer: address = proposal.proposer
+    proposer: address = self.proposals[proposalId].proposer
+    proposalEta: uint256 = self.proposals[proposalId].eta
 
     if msg.sender != proposer:
         # Whitelisted proposers can't be canceled for falling below proposal threshold unless msg.sender is knight
@@ -363,9 +361,9 @@ def cancel(proposalId: uint256):
         else:
             assert GovToken(self.token).getPriorVotes(proposer, block.number - 1) < self.proposalThreshold, "!threshold"
 
-    self.proposals[proposalId].canceled = True
-    for action in proposal.actions:
-        trx: Transaction = self._buildTrx(action, proposal.eta) 
+    self.proposals[proposalId].canceled = True   
+    for action in self.proposals[proposalId].actions:
+        trx: Transaction = self._buildTrx(action, proposalEta) 
         Timelock(self.timelock).cancelTransaction(trx)
 
     log ProposalCanceled(proposalId)
@@ -562,8 +560,7 @@ def getActions(proposalId: uint256) -> DynArray[ProposalAction, MAX_POSSIBLE_OPE
     @param proposalId the id of the proposal
     @return Targets, values, signatures, and calldatas of the proposal actions
     """
-    proposal: Proposal = self.proposals[proposalId]
-    return proposal.actions
+    return self.proposals[proposalId].actions
 
 @external
 @view
@@ -575,6 +572,16 @@ def getReceipt(proposalId: uint256, voter: address) -> Receipt:
     @return The voting receipt
     """
     return self._getReceipt(proposalId, voter)
+
+@external
+@view
+def proposalMaxActions() -> uint256:
+    return PROPOSAL_MAX_ACTIONS
+
+@external
+@view
+def quorumVotes() -> uint256:
+    return QUORUM_VOTES
 
 @external
 @view 
@@ -626,12 +633,10 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     @return The number of votes cast
     """
     assert self._state(proposalId) == ProposalState.ACTIVE, "!active"
-    assert support <= 2, "!vote_type" # @dev can we use enums instead?
-    proposal: Proposal = self.proposals[proposalId]
-    receipt: Receipt = self._getReceipt(proposalId, voter)
-    assert receipt.hasVoted == False, "!hasVoted"
+    assert support <= 2, "!vote_type" 
+    assert self._getHasVoted(proposalId, voter) == False, "!hasVoted"
     # @dev use min of current block and proposal startBlock instead ?
-    votes:uint256 = GovToken(self.token).getPriorVotes(voter, proposal.startBlock)
+    votes:uint256 = GovToken(self.token).getPriorVotes(voter, self.proposals[proposalId].startBlock)
     
     if support == 0:
         self.proposals[proposalId].againstVotes += votes
@@ -651,20 +656,19 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
 def _state(proposalId: uint256) -> ProposalState:
     assert self.proposalCount >= proposalId and proposalId > self.initialProposalId, "!proposalId"
 
-    proposal: Proposal = self.proposals[proposalId]
-    if proposal.canceled:
+    if self.proposals[proposalId].canceled:
         return ProposalState.CANCELED
-    elif block.number <= proposal.startBlock:
+    elif block.number <= self.proposals[proposalId].startBlock:
         return ProposalState.PENDING
-    elif block.number <= proposal.endBlock:
+    elif block.number <= self.proposals[proposalId].endBlock:
         return ProposalState.ACTIVE
-    elif proposal.forVotes <= proposal.againstVotes or proposal.forVotes < self.quorumVotes:
+    elif self.proposals[proposalId].forVotes <= self.proposals[proposalId].againstVotes or self.proposals[proposalId].forVotes < QUORUM_VOTES:
         return ProposalState.DEFEATED
-    elif proposal.eta == 0:
+    elif self.proposals[proposalId].eta == 0:
          return ProposalState.SUCCEEDED
-    elif proposal.executed:
+    elif self.proposals[proposalId].executed:
         return ProposalState.EXECUTED
-    elif block.timestamp >= proposal.eta + Timelock(self.timelock).GRACE_PERIOD():
+    elif block.timestamp >= self.proposals[proposalId].eta + Timelock(self.timelock).GRACE_PERIOD():
         return ProposalState.EXPIRED
     else:
         return ProposalState.QUEUED
@@ -678,3 +682,8 @@ def _isWhitelisted(account: address) -> bool:
 @view
 def _getReceipt(proposalId: uint256, voter: address) -> Receipt:
     return self.receipts[proposalId][voter]
+
+@internal
+@view
+def _getHasVoted(proposalId: uint256, voter: address) -> bool:
+    return self.receipts[proposalId][voter].hasVoted
