@@ -228,6 +228,7 @@ event NewKnight:
 @external
 def __init__(
     timelock: address, 
+    queen: address,
     token: address,
     votingPeriod: uint256,
     votingDelay: uint256,
@@ -249,18 +250,19 @@ def __init__(
     """
     assert timelock != empty(address), "!timelock"
     assert token != empty(address), "!token"
+    assert queen != empty(address), "!queen"
     assert votingPeriod >= MIN_VOTING_PERIOD and votingPeriod <= MAX_VOTING_PERIOD, "!votingPeriod"
     assert votingDelay >= MIN_VOTING_DELAY and votingDelay <= MAX_VOTING_DELAY, "!votingDelay"
     assert proposalThreshold >= MIN_PROPOSAL_THRESHOLD and proposalThreshold <= MAX_PROPOSAL_THRESHOLD, "!proposalThreshold"
     self.timelock = timelock
     self.token = token
+    self.queen = queen
     self.votingPeriod = votingPeriod
     self.votingDelay = votingDelay
     self.proposalThreshold = proposalThreshold
     self.quorumVotes = quorumVotes
     self.initialProposalId = initialProposalId
     self.proposalCount = initialProposalId
-    self.queen = msg.sender
     self.proposalMaxActions = 10
 
 

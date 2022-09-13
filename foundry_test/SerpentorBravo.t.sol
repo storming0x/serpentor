@@ -99,6 +99,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
         bytes memory serpentorArgs = abi.encode(
             address(timelock), 
+            address(timelock),
             address(token),
             VOTING_PERIOD,
             VOTING_DELAY,
@@ -126,10 +127,6 @@ contract SerpentorBravoTest is ExtendedTest {
         _setupReservedAddress();
 
         // setup coupled governance between serpentor and timelock
-        hoax(address(vyperDeployer));
-        serpentor.setPendingQueen(address(timelock));
-        hoax(address(timelock));
-        serpentor.acceptThrone();
         hoax(address(timelock));
         timelock.setPendingQueen(address(serpentor));
         hoax(address(serpentor));
