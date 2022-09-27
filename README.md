@@ -10,6 +10,11 @@
 
 A set of smart contracts tools for governance written in vyper
 
+## Contracts
+
+* Timelock.vy - "Vyper implementation of a timelock contract for governance"
+* SerpentorBravo.vy - "Vyper implementation of a governance contract for on-chain voting on proposals and execution"
+
 ## Requirements
 
 The test environment requires that the `vyper` compiler command can be accessed from your path
@@ -73,7 +78,15 @@ ape test
 
 ## Disclaimer
 
-Code has not been audited
+This is **experimental software** and is provided on an "as is" and "as available" basis **without any warranties**.
+
+While the first release has been audited (audits), these contracts have not been widely used in production.
+
+- Although the functionality is meant to be compatible with other well tested governance contracts, still expect changes from the original features.
+- You should thoroughly read each contract you plan to use.
+
+Use at your own risk.
+
 
 ## Acknowledgements
 

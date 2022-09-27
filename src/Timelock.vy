@@ -1,11 +1,12 @@
-# @version 0.3.6
+# @version 0.3.7
 
 """
 @title Yearn Time lock implementation
 @license GNU AGPLv3
 @author yearn.finance
 @notice
-    TODO: add notice description
+    A timelock contract implementation in vyper. Designed to work with close integration
+    with SerpentorBravo, a governance contract for on-chain voting of proposals and execution.
 """
 
 MAX_DATA_LEN: constant(uint256) = 16608
