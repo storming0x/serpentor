@@ -1,8 +1,15 @@
-# @version 0.3.6
+# @version 0.3.7
 
+"""
+@title Yearn SerpentorBravo a governance contract for on-chain voting on proposals
+@license GNU AGPLv3
+@author yearn.finance
+@notice
+    A vyper implementation of on-chain voting governance contract for proposals and execution of smart contract calls.
+"""
 # @dev adjust these settings to your own use case
 
-NAME: constant(String[20]) = "Serpentor Bravo"
+NAME: constant(String[20]) = "SerpentorBravo"
 # buffer for string descriptions. Can use ipfshash
 STR_LEN: constant(uint256) = 4000
 MAX_DATA_LEN: constant(uint256) = 16608
@@ -62,6 +69,7 @@ interface GovToken:
     def getPriorVotes(account: address, blockNumber: uint256) -> uint256:view
 
 # @notice Possible states that a proposal may be in
+# @dev caution should be taken when modifying this enum since its tightly coupled with internal '_state' method
 # @dev vyper enums follow a power of 2 enumeration e.g 1, 2, 4, 8, etc.
 enum ProposalState:
     PENDING
