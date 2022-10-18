@@ -9,11 +9,11 @@ plugins:
 dependencies:
   - name: openzeppelin
     github: OpenZeppelin/openzeppelin-contracts
-    version: 4.4.2
+    version: 4.7.3
 
 solidity:
   import_remapping:
-    - "@openzeppelin=openzeppelin/v4.4.2/contracts"
+    - "@openzeppelin=openzeppelin/v4.7.3/contracts"
 
 contracts_folder: src
 
