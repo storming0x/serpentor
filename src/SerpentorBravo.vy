@@ -684,7 +684,7 @@ def _state(proposalId: uint256) -> ProposalState:
          return ProposalState.SUCCEEDED
     elif self.proposals[proposalId].executed:
         return ProposalState.EXECUTED
-    elif block.timestamp >= self.proposals[proposalId].eta + Timelock(self.timelock).GRACE_PERIOD():
+    elif block.timestamp > self.proposals[proposalId].eta + Timelock(self.timelock).GRACE_PERIOD():
         return ProposalState.EXPIRED
     else:
         return ProposalState.QUEUED
