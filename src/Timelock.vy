@@ -139,7 +139,7 @@ def queueTransaction(trx: Transaction) -> bytes32:
     assert msg.sender == self.queen, "!queen"
     assert trx.eta >= block.timestamp + self.delay, "!eta"
 
-    trxHash: bytes32 = self._getTrxHash(trx)
+    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
     self.queuedTransactions[trxHash] = True
 
     log QueueTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
@@ -155,7 +155,7 @@ def cancelTransaction(trx: Transaction):
     """
     assert msg.sender == self.queen, "!queen"
 
-    trxHash: bytes32 = self._getTrxHash(trx)
+    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
     self.queuedTransactions[trxHash] = False
 
     log CancelTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
@@ -170,7 +170,7 @@ def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
     """
     assert msg.sender == self.queen, "!queen"
 
-    trxHash: bytes32 = self._getTrxHash(trx)
+    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
     assert self.queuedTransactions[trxHash], "!queued_trx"
     assert block.timestamp >= trx.eta, "!eta"
     assert block.timestamp <= trx.eta + GRACE_PERIOD, "!staled_trx"
@@ -210,7 +210,3 @@ def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
 @view
 def GRACE_PERIOD() -> uint256:
     return GRACE_PERIOD
-
-@internal
-def _getTrxHash(trx: Transaction) -> bytes32:
-    return keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
