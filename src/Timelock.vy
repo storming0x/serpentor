@@ -115,6 +115,7 @@ def acceptThrone():
     self.pendingQueen = empty(address)
 
     log NewQueen(msg.sender)
+    log NewPendingQueen(empty(address))
 
 @external
 def setPendingQueen(pendingQueen: address):
