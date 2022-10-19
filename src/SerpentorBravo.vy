@@ -491,14 +491,13 @@ def acceptThrone():
     assert msg.sender == self.pendingQueen, "!pendingQueen"
     # save values for events
     oldQueen: address = self.queen
-    oldPendingQueen: address = self.pendingQueen
     # new ruler
     self.queen = self.pendingQueen
     # clean up
     self.pendingQueen = empty(address)
 
-    log NewQueen(oldQueen, self.queen)
-    log NewPendingQueen(oldPendingQueen, empty(address))
+    log NewQueen(oldQueen, msg.sender)
+    log NewPendingQueen(msg.sender, empty(address))
 
 
 
