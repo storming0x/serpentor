@@ -16,13 +16,13 @@ MAX_DATA_LEN: constant(uint256) = 16608
 CALL_DATA_LEN: constant(uint256) = 16483
 METHOD_SIG_SIZE: constant(uint256) = 1024
 
-# about 24 hours
-MIN_VOTING_PERIOD: constant(uint256) = 5760
+# about 24 hours for 12 second blocks 24 * 60 * 60 / 12s
+MIN_VOTING_PERIOD: constant(uint256) = 7200
 # about 2 weeks
-MAX_VOTING_PERIOD: constant(uint256) = 80640
+MAX_VOTING_PERIOD: constant(uint256) = 100800
 MIN_VOTING_DELAY: constant(uint256) = 1
 # about 1 week
-MAX_VOTING_DELAY: constant(uint256) = 40320
+MAX_VOTING_DELAY: constant(uint256) = 50400
 
 # @notice The minimum setable proposal threshold
 MIN_PROPOSAL_THRESHOLD: constant(uint256) = 100 * 10** 18
@@ -58,11 +58,10 @@ struct Transaction:
 interface Timelock:
     def delay() -> uint256: view
     def GRACE_PERIOD() -> uint256: view
-    def acceptQueen(): nonpayable
     def queuedTransactions(hash: bytes32) -> bool: view
     def queueTransaction(trx:Transaction) -> bytes32: nonpayable
     def cancelTransaction(trx:Transaction): nonpayable
-    def executeTransaction(trx:Transaction) -> Bytes[MAX_DATA_LEN]: nonpayable
+    def executeTransaction(trx:Transaction) -> Bytes[MAX_DATA_LEN]: payable
 
 # @dev Comp compatible interface to get Voting weight of account at block number. Some tokens implement 'balanceOfAt' but this call can be adapted to integrate with 'balanceOfAt'
 interface GovToken:
@@ -134,8 +133,6 @@ knight: public(address)
 
 # @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
 QUORUM_VOTES: immutable(uint256)
-# @notice Setting for maximum number of allowed actions a proposal can execute
-PROPOSAL_MAX_ACTIONS: immutable(uint256)
 # @notice The duration of voting on a proposal, in blocks
 votingPeriod: public(uint256)
 # @notice The delay before voting on a proposal may take place, once proposed, in blocks
@@ -270,7 +267,6 @@ def __init__(
     self.proposalThreshold = proposalThreshold
     self.initialProposalId = initialProposalId
     self.proposalCount = initialProposalId
-    PROPOSAL_MAX_ACTIONS = 10
     QUORUM_VOTES = quorumVotes
 
 @external
@@ -289,7 +285,7 @@ def propose(
     assert GovToken(self.token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
 
     assert len(actions) != 0, "!no_actions"
-    assert len(actions) < PROPOSAL_MAX_ACTIONS, "!too_many_actions"
+    assert len(actions) < MAX_POSSIBLE_OPERATIONS, "!too_many_actions"
 
     latestProposalId: uint256 =  self.latestProposalIds[msg.sender]
     if latestProposalId != 0:
@@ -337,6 +333,7 @@ def queue(proposalId: uint256):
     log ProposalQueued(proposalId, eta)
 
 @external
+@payable
 def execute(proposalId: uint256):
     """
     @notice Executes a queued proposal if eta has passed
@@ -347,7 +344,7 @@ def execute(proposalId: uint256):
     self.proposals[proposalId].executed = True
     for action in self.proposals[proposalId].actions:
         trx: Transaction = self._buildTrx(action, proposalEta)   
-        Timelock(self.timelock).executeTransaction(trx)
+        Timelock(self.timelock).executeTransaction(trx, value=action.amount)
     
     log ProposalExecuted(proposalId)
 
@@ -584,7 +581,7 @@ def getReceipt(proposalId: uint256, voter: address) -> Receipt:
 @external
 @view
 def proposalMaxActions() -> uint256:
-    return PROPOSAL_MAX_ACTIONS
+    return MAX_POSSIBLE_OPERATIONS
 
 @external
 @view

@@ -79,5 +79,5 @@ interface SerpentorBravo {
     function setVotingPeriod(uint256 votingPeriod) external;
     function setProposalThreshold(uint256 proposalThreshold) external;
     function queue(uint256 proposalId) external;
-    function execute(uint256 proposalId) external;
+    function execute(uint256 proposalId) external payable;
 }

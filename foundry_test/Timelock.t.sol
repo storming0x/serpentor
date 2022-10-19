@@ -463,6 +463,7 @@ contract TimelockTest is ExtendedTest {
         bytes memory callData;
         uint256 amount = 10 ether;
         string memory signature = "";
+        assertEq(grantee.balance, 0);
 
         Transaction memory testTrx;
         bytes32 expectedTrxHash;
