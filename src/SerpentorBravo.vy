@@ -133,6 +133,9 @@ knight: public(address)
 
 # @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
 QUORUM_VOTES: immutable(uint256)
+# @notice Initial proposal id set at deployment time
+# @dev for migrating from other gov systems
+INITIAL_PROPOSAL_ID: immutable(uint256)
 # @notice The duration of voting on a proposal, in blocks
 votingPeriod: public(uint256)
 # @notice The delay before voting on a proposal may take place, once proposed, in blocks
@@ -145,9 +148,6 @@ timelock: public(address)
 token: public(address)
 # @notice The total number of proposals
 proposalCount: public(uint256)
-# @notice Initial proposal id set at deployment time
-# @dev for migrating from other gov systems
-initialProposalId: public(uint256)
 # @notice The storage record of all proposals ever proposed
 proposals: public(HashMap[uint256, Proposal])
 # @notice The latest proposal for each proposer
@@ -265,8 +265,8 @@ def __init__(
     self.votingPeriod = votingPeriod
     self.votingDelay = votingDelay
     self.proposalThreshold = proposalThreshold
-    self.initialProposalId = initialProposalId
     self.proposalCount = initialProposalId
+    INITIAL_PROPOSAL_ID = initialProposalId
     QUORUM_VOTES = quorumVotes
 
 @external
@@ -589,6 +589,11 @@ def quorumVotes() -> uint256:
     return QUORUM_VOTES
 
 @external
+@view
+def initialProposalId() -> uint256:
+    return INITIAL_PROPOSAL_ID
+
+@external
 @view 
 def domainSeparator() -> bytes32:
     """
@@ -665,7 +670,7 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
 @internal
 @view
 def _state(proposalId: uint256) -> ProposalState:
-    assert self.proposalCount >= proposalId and proposalId > self.initialProposalId, "!proposalId"
+    assert self.proposalCount >= proposalId and proposalId > INITIAL_PROPOSAL_ID, "!proposalId"
 
     if self.proposals[proposalId].canceled:
         return ProposalState.CANCELED
