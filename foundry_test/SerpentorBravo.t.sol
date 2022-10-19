@@ -82,7 +82,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     event VotingDelaySet(uint256 oldVotingDelay, uint256 newVotingDelay);
     event VotingPeriodSet(uint256 oldVotingPeriod, uint256 newVotingPeriod);
-    event ProposalThresoldSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
+    event ProposalThresholdSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
 
     event NewQueen(address indexed oldQueen, address indexed newQueen);
     event NewKnight(address indexed oldKnight, address indexed newKnight);    
@@ -936,7 +936,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 oldProposalThreshold = serpentor.proposalThreshold();
         // setup event
         vm.expectEmit(false, false, false, false);
-        emit ProposalThresoldSet(oldProposalThreshold, newProposalThreshold);
+        emit ProposalThresholdSet(oldProposalThreshold, newProposalThreshold);
         // execute
         vm.prank(currentQueen);
         serpentor.setProposalThreshold(newProposalThreshold);

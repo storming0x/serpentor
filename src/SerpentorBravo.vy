@@ -207,7 +207,7 @@ event VotingPeriodSet:
     newVotingPeriod: uint256
 
 # @notice Event emitted when the proposal threshold is set
-event ProposalThresoldSet:
+event ProposalThresholdSet:
     oldProposalThreshold: uint256
     newProposalThreshold: uint256
 
@@ -454,7 +454,7 @@ def setProposalThreshold(newProposalThreshold: uint256):
     oldProposalThreshold: uint256 = self.proposalThreshold
     self.proposalThreshold = newProposalThreshold
 
-    log ProposalThresoldSet(oldProposalThreshold, newProposalThreshold)
+    log ProposalThresholdSet(oldProposalThreshold, newProposalThreshold)
 
 @external
 def setWhitelistAccountExpiration(account: address, expiration: uint256):

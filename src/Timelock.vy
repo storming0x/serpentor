@@ -35,7 +35,7 @@ event NewQueen:
     newQueen: indexed(address)
 
 event NewPendingQueen:
-    newPendingqueen: indexed(address)
+    newPendingQueen: indexed(address)
 
 event NewDelay:
     newDelay: uint256
