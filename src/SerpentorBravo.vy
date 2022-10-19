@@ -128,7 +128,7 @@ struct Proposal:
 queen: public(address)
 # @notice pending empress for this contract
 pendingQueen: public(address)
-# @notice guardian role for this contract
+# @notice whitelist guardian role for this contract
 knight: public(address)
 
 # @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
