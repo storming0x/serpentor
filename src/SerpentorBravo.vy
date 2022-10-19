@@ -12,6 +12,7 @@
 NAME: constant(String[20]) = "SerpentorBravo"
 # buffer for string descriptions. Can use ipfshash
 STR_LEN: constant(uint256) = 4000
+# these values are reasonable estimates from historical onchain data of compound and other gov systems
 MAX_DATA_LEN: constant(uint256) = 16608
 CALL_DATA_LEN: constant(uint256) = 16483
 METHOD_SIG_SIZE: constant(uint256) = 1024
