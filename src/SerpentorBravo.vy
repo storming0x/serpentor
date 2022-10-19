@@ -30,7 +30,7 @@ MIN_PROPOSAL_THRESHOLD: constant(uint256) = 100 * 10** 18
 MAX_PROPOSAL_THRESHOLD: constant(uint256) = 5000 * 10 ** 18
 
 # @notice The maximum number of operations in a proposal
-MAX_POSSIBLE_OPERATIONS: constant(uint256) = 20
+MAX_POSSIBLE_OPERATIONS: constant(uint256) = 10
 
 # @notice The EIP-712 typehash for the contract's domain
 DOMAIN_TYPE_HASH: constant(bytes32) = keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')
