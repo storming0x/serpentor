@@ -285,7 +285,7 @@ def propose(
     assert GovToken(token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
 
     assert len(actions) != 0, "!no_actions"
-    assert len(actions) < MAX_POSSIBLE_OPERATIONS, "!too_many_actions"
+    assert len(actions) <= MAX_POSSIBLE_OPERATIONS, "!too_many_actions"
 
     latestProposalId: uint256 =  self.latestProposalIds[msg.sender]
     if latestProposalId != 0:

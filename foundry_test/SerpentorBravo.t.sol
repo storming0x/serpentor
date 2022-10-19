@@ -224,7 +224,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 maxActions = serpentor.proposalMaxActions();
         uint256 threshold = serpentor.proposalThreshold();
         // if maxActions is a big number, tests runs out of gas
-        vm.assume(votes > threshold && size >= maxActions && size <= maxActions + 5);
+        vm.assume(votes > threshold && size > maxActions && size <= maxActions + 5);
         // setup
         address yoloProposer = address(0xBEEF);
         deal(address(token), yoloProposer, votes);
