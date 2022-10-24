@@ -27,14 +27,14 @@ contract SerpentorBravoTest is ExtendedTest {
     uint8 public constant ARR_SIZE = 7;
     uint public constant GRACE_PERIOD = 14 days;
     uint public constant MINIMUM_DELAY = 1;
-    uint public constant MAXIMUM_DELAY = 40320;
-    uint public constant MIN_VOTING_PERIOD = 5760; // about 24 hours
-    uint public constant MAX_VOTING_PERIOD = 80640; // 2 weeks
+    uint public constant MAXIMUM_DELAY = 50400;
+    uint public constant MIN_VOTING_PERIOD = 7200; // about 24 hours for 12s blocks
+    uint public constant MAX_VOTING_PERIOD = 100800; // 2 weeks
 
     uint public constant MIN_PROPOSAL_THRESHOLD = 100e18; 
     uint public constant MAX_PROPOSAL_THRESHOLD = 5000e18; // 2 weeks
 
-    uint public constant VOTING_PERIOD = 5760; // about 24 hours
+    uint public constant VOTING_PERIOD = 7200; // about 24 hours for 12s blocks
     uint public constant THRESHOLD = 100e18;
     uint public constant QUORUM_VOTES = 500e18;
     uint public constant VOTING_DELAY = 20000;
@@ -82,7 +82,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     event VotingDelaySet(uint256 oldVotingDelay, uint256 newVotingDelay);
     event VotingPeriodSet(uint256 oldVotingPeriod, uint256 newVotingPeriod);
-    event ProposalThresoldSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
+    event ProposalThresholdSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
 
     event NewQueen(address indexed oldQueen, address indexed newQueen);
     event NewKnight(address indexed oldKnight, address indexed newKnight);    
@@ -224,7 +224,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 maxActions = serpentor.proposalMaxActions();
         uint256 threshold = serpentor.proposalThreshold();
         // if maxActions is a big number, tests runs out of gas
-        vm.assume(votes > threshold && size >= maxActions && size <= maxActions + 5);
+        vm.assume(votes > threshold && size > maxActions && size <= maxActions + 5);
         // setup
         address yoloProposer = address(0xBEEF);
         deal(address(token), yoloProposer, votes);
@@ -245,8 +245,8 @@ contract SerpentorBravoTest is ExtendedTest {
         // fill up action array
         for (uint i = 0; i < size; i++)
              actions[i] = testAction;
-       
-        vm.expectRevert(bytes("!too_many_actions"));
+        // vyper reverts if array is longer than Max without data
+        vm.expectRevert();
 
         //execute
         hoax(yoloProposer);
@@ -936,7 +936,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 oldProposalThreshold = serpentor.proposalThreshold();
         // setup event
         vm.expectEmit(false, false, false, false);
-        emit ProposalThresoldSet(oldProposalThreshold, newProposalThreshold);
+        emit ProposalThresholdSet(oldProposalThreshold, newProposalThreshold);
         // execute
         vm.prank(currentQueen);
         serpentor.setProposalThreshold(newProposalThreshold);

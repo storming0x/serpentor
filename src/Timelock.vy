@@ -35,7 +35,7 @@ event NewQueen:
     newQueen: indexed(address)
 
 event NewPendingQueen:
-    newPendingqueen: indexed(address)
+    newPendingQueen: indexed(address)
 
 event NewDelay:
     newDelay: uint256
@@ -115,6 +115,7 @@ def acceptThrone():
     self.pendingQueen = empty(address)
 
     log NewQueen(msg.sender)
+    log NewPendingQueen(empty(address))
 
 @external
 def setPendingQueen(pendingQueen: address):
