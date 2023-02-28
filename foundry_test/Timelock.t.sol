@@ -10,7 +10,7 @@ import {Timelock, Transaction} from "./interfaces/Timelock.sol";
 contract TimelockTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
     Timelock private timelock;
-    address public queen = address(1);
+    address public admin = address(1);
     address public holder = address(2);
     address public grantee = address(3);
 
@@ -22,13 +22,13 @@ contract TimelockTest is ExtendedTest {
     // events
 
     event NewDelay(uint256 newDelay);
-    event NewQueen(address indexed newQueen);
+    event NewAdmin(address indexed newAdmin);
     event QueueTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
     event CancelTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
     event ExecuteTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
 
     function setUp() public {
-        bytes memory args = abi.encode(queen, delay);
+        bytes memory args = abi.encode(admin, delay);
         timelock = Timelock(vyperDeployer.deployContract("src/", "Timelock", args));
         console.log("address for timelock: ", address(timelock));
 
@@ -38,7 +38,7 @@ contract TimelockTest is ExtendedTest {
 
     function testSetup() public {
         assertNeq(address(timelock), address(0));
-        assertEq(address(timelock.queen()), queen);
+        assertEq(address(timelock.admin()), admin);
         assertEq(timelock.delay(), delay);
         assertEq(timelock.delay(), MINIMUM_DELAY);
     }
@@ -84,60 +84,52 @@ contract TimelockTest is ExtendedTest {
         timelock.setDelay(newDelay);
     }
 
-    function testRandomAcctCannotSetNewQueen(address random) public {
+    function testRandomAcctCannotSetNewAdmin(address random) public {
         vm.assume(random != address(timelock));
         // setup
         vm.expectRevert(bytes("!Timelock"));
         // execute
         vm.prank(random);
-        timelock.setPendingQueen(random);
+        timelock.setPendingAdmin(random);
     }
 
-    function testRandomAcctCannotTakeOverThrone(address random) public {
-        vm.assume(random != queen && random != address(0));
+    function testRandomAcctCannotTakeOverAdmin(address random) public {
+        vm.assume(random != admin && random != address(0));
         // setup
-        vm.expectRevert(bytes("!pendingQueen"));
+        vm.expectRevert(bytes("!pendingAdmin"));
         // execute
         vm.prank(random);
-        timelock.acceptThrone();
+        timelock.acceptAdmin();
     }
 
-    function testOnlyPendingQueenCanAcceptThrone() public {
+    function testOnlyPendingAdminCanAcceptAdmin() public {
         // setup
-        address futureQueen = address(0xBEEF);
-        // setup pendingQueen
+        address futureAdmin = address(0xBEEF);
+        // setup pendingAdmin
         vm.prank(address(timelock));
-        timelock.setPendingQueen(futureQueen);
-        assertEq(timelock.pendingQueen(), futureQueen);
+        timelock.setPendingAdmin(futureAdmin);
+        assertEq(timelock.pendingAdmin(), futureAdmin);
         //setup for event checks
         vm.expectEmit(true, false, false, false);
-        emit NewQueen(futureQueen);
+        emit NewAdmin(futureAdmin);
 
         // execute
-        vm.prank(futureQueen);
-        timelock.acceptThrone();
+        vm.prank(futureAdmin);
+        timelock.acceptAdmin();
 
         // asserts
-        assertEq(timelock.queen(), futureQueen);
-        assertEq(timelock.pendingQueen(), address(0));
+        assertEq(timelock.admin(), futureAdmin);
+        assertEq(timelock.pendingAdmin(), address(0));
     } 
 
     function testRandomAcctCannotQueueTrx(address random) public {
-        vm.assume(random != queen);
+        vm.assume(random != admin);
         // setup
-        vm.expectRevert(bytes("!queen"));
-
-        Transaction memory emptyTrx = Transaction({
-            target: address(timelock),
-            amount: 0,
-            eta: block.timestamp + 10 days,
-            signature: "",
-            callData: ""
-        });
+        vm.expectRevert(bytes("!admin"));
 
         // execute
         vm.prank(random);
-        timelock.queueTransaction(emptyTrx);
+        timelock.queueTransaction(address(timelock), 0, "", "", block.timestamp + 10 days);
     }
 
     function testQueueTrxEtaCannotBeInvalid() public {
@@ -145,17 +137,10 @@ contract TimelockTest is ExtendedTest {
         vm.expectRevert(bytes("!eta"));
     
         uint256 badEta = block.timestamp;
-        Transaction memory emptyTrx = Transaction({
-            target: address(timelock),
-            amount: 0,
-            eta: badEta,
-            signature: "",
-            callData: ""
-        });
 
         // execute
-        vm.prank(address(queen));
-        timelock.queueTransaction(emptyTrx);
+        vm.prank(address(admin));
+        timelock.queueTransaction(address(timelock), 0, "", "", badEta);
     }
 
     function testShouldQueueTrx() public {
@@ -167,8 +152,8 @@ contract TimelockTest is ExtendedTest {
         bytes memory callData = abi.encodeWithSelector(Timelock.setDelay.selector, newDelay);
         uint256 amount = 0;
         string memory signature = "";
-        Transaction memory testTrx;
         bytes32 expectedTrxHash;
+        Transaction memory testTrx;
         (testTrx, expectedTrxHash) =_getTransactionAndHash(
             target,
             amount,
@@ -181,29 +166,21 @@ contract TimelockTest is ExtendedTest {
         emit QueueTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         // asserts
         assertEq(expectedTrxHash, trxHash);
         assertTrue(timelock.queuedTransactions(trxHash));
     }
 
     function testRandomAcctCannotCancelQueueTrx(address random) public {
-        vm.assume(random != queen);
+        vm.assume(random != admin);
         // setup
-        vm.expectRevert(bytes("!queen"));
-
-        Transaction memory emptyTrx = Transaction({
-            target: address(timelock),
-            amount: 0,
-            eta: block.timestamp + 10 days,
-            signature: "",
-            callData: ""
-        });
+        vm.expectRevert(bytes("!admin"));
 
         // execute
         vm.prank(address(0xABCD));
-        timelock.cancelTransaction(emptyTrx);
+        timelock.cancelTransaction(address(timelock), 0, "", "", block.timestamp + 10 days);
     }
 
      function testShouldCancelQueuedTrx() public {
@@ -224,8 +201,8 @@ contract TimelockTest is ExtendedTest {
             eta
         );
 
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
 
         //setup for event checks
@@ -233,33 +210,25 @@ contract TimelockTest is ExtendedTest {
         emit CancelTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(queen));
-        timelock.cancelTransaction(testTrx);
+        vm.prank(address(admin));
+        timelock.cancelTransaction(target, amount, signature, callData, eta);
 
         // asserts
         assertFalse(timelock.queuedTransactions(trxHash));
     }
 
     function testRandomAcctCantExecQueuedTrx(address random) public {
-        vm.assume(random != queen);
+        vm.assume(random != admin);
         // setup
-        vm.expectRevert(bytes("!queen"));
-
-        Transaction memory emptyTrx = Transaction({
-            target: address(timelock),
-            amount: 0,
-            eta: block.timestamp + 10 days,
-            signature: "",
-            callData: ""
-        });
+        vm.expectRevert(bytes("!admin"));
 
         // execute
         vm.prank(random);
-        timelock.cancelTransaction(emptyTrx);
+        timelock.cancelTransaction(address(timelock), 0, "", "", block.timestamp + 10 days);
     }
 
     function testRandomAcctCannotExecQueuedTrx(address random) public {
-        vm.assume(random != queen);
+        vm.assume(random != admin);
         // setup
         uint256 newDelay = 5 days;
         uint256 eta = block.timestamp + delay + 2 days;
@@ -277,14 +246,14 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
 
-        vm.expectRevert(bytes("!queen"));
+        vm.expectRevert(bytes("!admin"));
         // execute
         vm.prank(random);
-        timelock.executeTransaction(testTrx);
+        timelock.executeTransaction(target, amount, signature, callData, eta);
     }
 
     function testCannotExecNonExistingTrx() public {
@@ -306,8 +275,8 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(queuedTransaction);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
 
         Transaction memory wrongTrx;
@@ -322,8 +291,8 @@ contract TimelockTest is ExtendedTest {
 
         vm.expectRevert(bytes("!queued_trx"));
         // execute
-        vm.prank(address(queen));
-        timelock.executeTransaction(wrongTrx);
+        vm.prank(address(admin));
+        timelock.executeTransaction(target, amount, signature, "", eta);
     }
 
     function testCannotExecQueuedTrxBeforeETA() public {
@@ -344,15 +313,15 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
 
         skip(2 days); // short of ETA
         vm.expectRevert(bytes("!eta"));
         // execute
-        vm.prank(address(queen));
-        timelock.executeTransaction(testTrx);
+        vm.prank(address(admin));
+        timelock.executeTransaction(target, amount, signature, callData, eta);
     }
 
     function testCannotExecQueuedTrxAfterGracePeriod(uint256 executionTime) public {
@@ -375,14 +344,14 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
         skip(executionTime); // skip to time of execution passed gracePeriod
         vm.expectRevert(bytes("!staled_trx"));
         // execute
-        vm.prank(address(queen));
-        timelock.executeTransaction(testTrx);
+        vm.prank(address(admin));
+        timelock.executeTransaction(target, amount, signature, callData, eta);
     }
 
 
@@ -404,8 +373,8 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
         skip(eta + 1); // 1 pass eta
          //setup for event checks
@@ -413,8 +382,8 @@ contract TimelockTest is ExtendedTest {
         emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(queen));
-        bytes memory response = timelock.executeTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes memory response = timelock.executeTransaction(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(string(response), string(""));
@@ -439,8 +408,8 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
         skip(eta + 1); // 1 pass eta
          //setup for event checks
@@ -448,8 +417,8 @@ contract TimelockTest is ExtendedTest {
         emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(queen));
-        bytes memory response = timelock.executeTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes memory response = timelock.executeTransaction(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(string(response), string(""));
@@ -474,8 +443,8 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
         skip(eta + 1); // 1 pass 
         deal(address(timelock), 11 ether);
@@ -485,8 +454,8 @@ contract TimelockTest is ExtendedTest {
         emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        hoax(address(queen), 1 ether);
-        timelock.executeTransaction(testTrx);
+        hoax(address(admin), 1 ether);
+        timelock.executeTransaction(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(grantee.balance, amount);
@@ -510,8 +479,8 @@ contract TimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(queen));
-        bytes32 trxHash = timelock.queueTransaction(testTrx);
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
         assertTrue(timelock.queuedTransactions(trxHash));
         skip(eta + 1); // 1 pass
         assertEq(address(timelock).balance, 0);
@@ -521,8 +490,8 @@ contract TimelockTest is ExtendedTest {
         emit ExecuteTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        hoax(address(queen), 10 ether);
-        timelock.executeTransaction{value: amount}(testTrx);
+        hoax(address(admin), 10 ether);
+        timelock.executeTransaction{value: amount}(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(grantee.balance, amount);

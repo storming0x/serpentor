@@ -128,9 +128,9 @@ contract SerpentorBravoTest is ExtendedTest {
 
         // setup coupled governance between serpentor and timelock
         hoax(address(timelock));
-        timelock.setPendingQueen(address(serpentor));
+        timelock.setPendingAdmin(address(serpentor));
         hoax(address(serpentor));
-        timelock.acceptThrone();
+        timelock.acceptAdmin();
         hoax(address(timelock));
         serpentor.setKnight(knight);
         hoax(address(knight));
@@ -159,7 +159,7 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(serpentor.initialProposalId(), 0);
         assertEq(serpentor.queen(), address(timelock));
         assertEq(serpentor.pendingQueen(), address(0));
-        assertEq(timelock.queen(), address(serpentor));
+        assertEq(timelock.admin(), address(serpentor));
         assertEq(serpentor.knight(), knight);
         assertTrue(serpentor.isWhitelisted(whitelistedProposer));
         // check tests have correct starting balance of tokens

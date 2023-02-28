@@ -10,15 +10,15 @@ struct Transaction {
 }
 
 interface Timelock {
-    function queen() external view returns (address);
-    function pendingQueen() external view returns (address);
+    function admin() external view returns (address);
+    function pendingAdmin() external view returns (address);
     function delay() external view returns (uint);
     function setDelay(uint256 newDelay) external;       
-    function setPendingQueen(address pendingqueen) external;
+    function setPendingAdmin(address pendingadmin) external;
     function GRACE_PERIOD() external view returns (uint);
-    function acceptThrone() external;
+    function acceptAdmin() external;
     function queuedTransactions(bytes32 hash) external view returns (bool);
-    function queueTransaction(Transaction calldata trx) external returns (bytes32);
-    function cancelTransaction(Transaction calldata trx) external;
-    function executeTransaction(Transaction calldata trx) external payable returns (bytes memory);
+    function queueTransaction(address target, uint value, string memory signature, bytes memory data, uint eta) external returns (bytes32);
+    function cancelTransaction(address target, uint value, string memory signature, bytes memory data, uint eta) external;
+    function executeTransaction(address target, uint value, string memory signature, bytes memory data, uint eta) external payable returns (bytes memory);
 }

@@ -60,9 +60,9 @@ interface Timelock:
     def delay() -> uint256: view
     def GRACE_PERIOD() -> uint256: view
     def queuedTransactions(hash: bytes32) -> bool: view
-    def queueTransaction(trx:Transaction) -> bytes32: nonpayable
-    def cancelTransaction(trx:Transaction): nonpayable
-    def executeTransaction(trx:Transaction) -> Bytes[MAX_DATA_LEN]: payable
+    def queueTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32: nonpayable
+    def cancelTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256): nonpayable
+    def executeTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]: payable
 
 # @dev Comp compatible interface to get Voting weight of account at block number. Some tokens implement 'balanceOfAt' but this call can be adapted to integrate with 'balanceOfAt'
 interface GovToken:
@@ -344,8 +344,7 @@ def execute(proposalId: uint256):
     proposalEta: uint256 = self.proposals[proposalId].eta
     self.proposals[proposalId].executed = True
     for action in self.proposals[proposalId].actions:
-        trx: Transaction = self._buildTrx(action, proposalEta)   
-        Timelock(timelock).executeTransaction(trx, value=action.amount)
+        Timelock(timelock).executeTransaction(action.target, action.amount, action.signature, action.callData, proposalEta, value=action.amount)
     
     log ProposalExecuted(proposalId)
 
@@ -369,8 +368,7 @@ def cancel(proposalId: uint256):
 
     self.proposals[proposalId].canceled = True   
     for action in self.proposals[proposalId].actions:
-        trx: Transaction = self._buildTrx(action, proposalEta) 
-        Timelock(timelock).cancelTransaction(trx)
+        Timelock(timelock).cancelTransaction(action.target, action.amount, action.signature, action.callData, proposalEta)
 
     log ProposalCanceled(proposalId)
 
@@ -611,20 +609,7 @@ def name() -> String[20]:
 def _queueOrRevertInternal(action: ProposalAction, eta: uint256):
     trxHash: bytes32 = keccak256(_abi_encode(action.target, action.amount, action.signature, action.callData, eta))
     assert Timelock(timelock).queuedTransactions(trxHash) != True, "!duplicate_trx"
-    timelockTrx: Transaction = self._buildTrx(action, eta)
-    Timelock(timelock).queueTransaction(timelockTrx)
-
-@internal
-def _buildTrx(action: ProposalAction, eta: uint256) -> Transaction:
-    timelockTrx: Transaction = Transaction({
-        target: action.target,
-        amount: action.amount,
-        eta: eta,
-        signature: action.signature,
-        callData: action.callData,
-    })
-
-    return timelockTrx
+    Timelock(timelock).queueTransaction(action.target, action.amount, action.signature, action.callData, eta)
 
 @internal
 @view

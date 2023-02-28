@@ -5,37 +5,15 @@
 @license GNU AGPLv3
 @author yearn.finance
 @notice
-    A timelock contract implementation in vyper. Designed to work with close integration
+    A timelock contract implementation in vyper. Designed to work with most governance voting contracts and close integration
     with SerpentorBravo, a governance contract for on-chain voting of proposals and execution.
 """
 
-MAX_DATA_LEN: constant(uint256) = 16608
-CALL_DATA_LEN: constant(uint256) = 16483
-METHOD_SIG_SIZE: constant(uint256) = 1024
-DAY: constant(uint256) = 86400
-GRACE_PERIOD: constant(uint256) = 14 * DAY
-MINIMUM_DELAY: constant(uint256) = 2 * DAY
-MAXIMUM_DELAY: constant(uint256) = 30 * DAY
+event NewAdmin:
+    newAdmin: indexed(address)
 
-# @notice a single transaction to be executed by the timelock
-struct Transaction:
-    # @notice the target address for calls to be made
-    target: address
-    # @notice The value (i.e. msg.value) to be passed to the calls to be made
-    amount: uint256
-    # @notice The estimated time for execution of the trx
-    eta: uint256
-    # @notice The function signature to be called
-    signature: String[METHOD_SIG_SIZE]
-    # @notice The calldata to be passed to the call
-    callData: Bytes[CALL_DATA_LEN]
-
-
-event NewQueen:
-    newQueen: indexed(address)
-
-event NewPendingQueen:
-    newPendingQueen: indexed(address)
+event NewPendingAdmin:
+    newPendingAdmin: indexed(address)
 
 event NewDelay:
     newDelay: uint256
@@ -64,24 +42,31 @@ event QueueTransaction:
     data: Bytes[CALL_DATA_LEN]
     eta: uint256
 
-queen: public(address)
-pendingQueen: public(address)
+MAX_DATA_LEN: constant(uint256) = 16608
+CALL_DATA_LEN: constant(uint256) = 16483
+METHOD_SIG_SIZE: constant(uint256) = 1024
+DAY: constant(uint256) = 86400
+GRACE_PERIOD: constant(uint256) = 14 * DAY
+MINIMUM_DELAY: constant(uint256) = 2 * DAY
+MAXIMUM_DELAY: constant(uint256) = 30 * DAY
+
+admin: public(address)
+pendingAdmin: public(address)
 delay: public(uint256)
 queuedTransactions: public(HashMap[bytes32,  bool])
 
-
 @external
-def __init__(queen: address, delay: uint256):
+def __init__(admin: address, delay: uint256):
     """
     @notice Deploys the timelock with initial values
-    @param queen The contract that rules over the timelock
+    @param admin The contract that rules over the timelock
     @param delay The delay for timelock
     """
 
     assert delay >= MINIMUM_DELAY, "Delay must exceed minimum delay"
     assert delay <= MAXIMUM_DELAY, "Delay must not exceed maximum delay"
-    assert queen != empty(address), "!queen"
-    self.queen = queen
+    assert admin != empty(address), "!admin"
+    self.admin = admin
     self.delay = delay
 
 @external
@@ -104,105 +89,123 @@ def setDelay(delay: uint256):
     log NewDelay(delay)
 
 @external
-def acceptThrone():
+def acceptAdmin():
     """
     @notice
-        updates `pendingQueen` to queen.
-        msg.sender must be `pendingQueen`
+        updates `pendingAdmin` to admin.
+        msg.sender must be `pendingAdmin`
     """
-    assert msg.sender == self.pendingQueen, "!pendingQueen"
-    self.queen = msg.sender
-    self.pendingQueen = empty(address)
+    assert msg.sender == self.pendingAdmin, "!pendingAdmin"
+    self.admin = msg.sender
+    self.pendingAdmin = empty(address)
 
-    log NewQueen(msg.sender)
-    log NewPendingQueen(empty(address))
+    log NewAdmin(msg.sender)
+    log NewPendingAdmin(empty(address))
 
 @external
-def setPendingQueen(pendingQueen: address):
+def setPendingAdmin(pendingAdmin: address):
     """
     @notice
-       Updates `pendingQueen` value
+       Updates `pendingAdmin` value
        msg.sender must be this contract
-    @param pendingQueen The proposed new queen for the contract
+    @param pendingAdmin The proposed new admin for the contract
     """
     assert msg.sender == self, "!Timelock"
-    self.pendingQueen = pendingQueen
+    self.pendingAdmin = pendingAdmin
 
-    log NewPendingQueen(pendingQueen)
+    log NewPendingAdmin(pendingAdmin)
 
 @external
-def queueTransaction(trx: Transaction) -> bytes32:
+def queueTransaction(
+    target: address,
+    amount: uint256,
+    signature: String[METHOD_SIG_SIZE],
+    data: Bytes[CALL_DATA_LEN],
+    eta: uint256
+) -> bytes32:
     """
     @notice
         adds transaction to execution queue
     @param trx Transaction to queue
     """
-    assert msg.sender == self.queen, "!queen"
-    assert trx.eta >= block.timestamp + self.delay, "!eta"
+    assert msg.sender == self.admin, "!admin"
+    assert eta >= block.timestamp + self.delay, "!eta"
 
-    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
+    trxHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
     self.queuedTransactions[trxHash] = True
 
-    log QueueTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
+    log QueueTransaction(trxHash, target, amount, signature, data, eta)
 
     return trxHash
 
 @external
-def cancelTransaction(trx: Transaction):
+def cancelTransaction(
+    target: address,
+    amount: uint256,
+    signature: String[METHOD_SIG_SIZE],
+    data: Bytes[CALL_DATA_LEN],
+    eta: uint256
+):
     """
     @notice
         cancels a queued transaction
     @param trx Transaction to cancel
     """
-    assert msg.sender == self.queen, "!queen"
+    assert msg.sender == self.admin, "!admin"
 
-    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
+    trxHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
     self.queuedTransactions[trxHash] = False
 
-    log CancelTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
+    log CancelTransaction(trxHash, target, amount, signature, data, eta)
 
 @payable
 @external
-def executeTransaction(trx: Transaction) -> Bytes[MAX_DATA_LEN]:
+def executeTransaction(
+    target: address,
+    amount: uint256,
+    signature: String[METHOD_SIG_SIZE],
+    data: Bytes[CALL_DATA_LEN],
+    eta: uint256
+) -> Bytes[MAX_DATA_LEN]:
     """
     @notice
         executes a queued transaction
     @param trx Transaction to execute
     """
-    assert msg.sender == self.queen, "!queen"
+    assert msg.sender == self.admin, "!admin"
 
-    trxHash: bytes32 = keccak256(_abi_encode(trx.target, trx.amount, trx.signature, trx.callData, trx.eta))
+    trxHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
     assert self.queuedTransactions[trxHash], "!queued_trx"
-    assert block.timestamp >= trx.eta, "!eta"
-    assert block.timestamp <= trx.eta + GRACE_PERIOD, "!staled_trx"
+    assert block.timestamp >= eta, "!eta"
+    assert block.timestamp <= eta + GRACE_PERIOD, "!staled_trx"
 
     self.queuedTransactions[trxHash] = False
 
     callData: Bytes[MAX_DATA_LEN] = b""
 
-    if len(trx.signature) == 0:
+    if len(signature) == 0:
         # @dev use provided data directly
-        callData = trx.callData
+        callData = data
     else: 
         # @dev use signature + data
-        sig_hash: bytes32 = keccak256(trx.signature)
+        sig_hash: bytes32 = keccak256(signature)
         func_sig: bytes4 = convert(slice(sig_hash, 0, 4), bytes4)
-        callData = concat(func_sig, trx.callData)
+        callData = concat(func_sig, data)
 
     success: bool = False
     response: Bytes[MAX_DATA_LEN] = b""
 
     success, response = raw_call(
-        trx.target,
+        target,
         callData,
         max_outsize=MAX_DATA_LEN,
-        value=trx.amount,
+        value=amount,
         revert_on_failure=False
     )
 
     assert success, "!trx_revert"
 
-    log ExecuteTransaction(trxHash, trx.target, trx.amount, trx.signature, trx.callData, trx.eta)
+    log ExecuteTransaction(trxHash, target, amount, signature, data, eta)
 
     return response
 
