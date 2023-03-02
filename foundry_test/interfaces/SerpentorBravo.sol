@@ -12,20 +12,15 @@ enum ProposalState {
     EXPIRED,
     EXECUTED
 }
-    
-
-struct ProposalAction {
-    address target;
-    uint256 value;
-    string signature;  
-    bytes callData;
-}
 
 struct Proposal {
     uint256 id;
     address proposer;
     uint256 eta;
-    ProposalAction[] actions;
+    address[] targets;
+    uint256[] values;
+    string[] signatures;
+    bytes[] calldatas;
     uint256 startBlock;
     uint256 endBlock;
     uint256 forVotes;
@@ -67,7 +62,7 @@ interface SerpentorBravo {
 
     // state changing funcs
     function setPendingAdmin(address newAdmin) external;
-    function acceptThrone() external;
+    function acceptAdmin() external;
     function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) external returns (uint256);
     function cancel(uint256 proposalId) external;
     function setWhitelistAccountExpiration(address account, uint256 expiration) external;

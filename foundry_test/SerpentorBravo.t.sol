@@ -290,7 +290,7 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(proposal.id, proposalId);
         assertEq(proposal.proposer, grantProposer);
         assertEq(proposal.eta, 0);
-        assertEq(proposal.actions.length, targets.length);
+        assertEq(proposal.targets.length, targets.length);
         assertEq(proposal.startBlock, expectedStartBlock);
         assertEq(proposal.endBlock, expectedEndBlock);
         assertEq(proposal.forVotes, 0);
@@ -472,7 +472,7 @@ contract SerpentorBravoTest is ExtendedTest {
         (targets, values, signatures, calldatas) = _setupTestProposal(grantProposer, threshold + 1);
         (proposalId, expectedETA) = _submitQueuedTestProposal(voters, targets, values, signatures, calldatas, grantProposer);
         Proposal memory proposal = serpentor.proposals(proposalId);
-        bytes32 expectedTxHash = _getTrxHash(proposal.actions[0].target, proposal.actions[0].value, proposal.actions[0].signature, proposal.actions[0].callData, expectedETA);
+        bytes32 expectedTxHash = _getTrxHash(proposal.targets[0], proposal.values[0], proposal.signatures[0], proposal.calldatas[0], expectedETA);
         uint256 proposerBalance = token.balanceOf(grantProposer);
         // proposer goes below
         hoax(grantProposer);
@@ -844,7 +844,7 @@ contract SerpentorBravoTest is ExtendedTest {
         (proposalId, expectedETA) = _submitQueuedTestProposal(voters, targets, values, signatures, calldatas, whitelistedProposer);
 
         Proposal memory proposal = serpentor.proposals(proposalId);
-        bytes32 expectedTxHash = _getTrxHash(proposal.actions[0].target, proposal.actions[0].value, proposal.actions[0].signature, proposal.actions[0].callData, expectedETA);
+        bytes32 expectedTxHash = _getTrxHash(proposal.targets[0], proposal.values[0], proposal.signatures[0], proposal.calldatas[0], expectedETA);
 
         // asserts
         assertEq(serpentor.state(proposalId), uint8(ProposalState.QUEUED));
@@ -889,7 +889,7 @@ contract SerpentorBravoTest is ExtendedTest {
         (proposalId, expectedETA) = _submitQueuedTestProposal(voters, targets, values, signatures, calldatas, whitelistedProposer);
 
         Proposal memory proposal = serpentor.proposals(proposalId);
-        bytes32 expectedTxHash = _getTrxHash(proposal.actions[0].target, proposal.actions[0].value, proposal.actions[0].signature, proposal.actions[0].callData, expectedETA);
+        bytes32 expectedTxHash = _getTrxHash(proposal.targets[0], proposal.values[0], proposal.signatures[0], proposal.calldatas[0], expectedETA);
         
         skip(expectedETA + 1);
         // timelock does not have enough funds for proposal so trx will revert
@@ -923,7 +923,7 @@ contract SerpentorBravoTest is ExtendedTest {
         (proposalId, expectedETA) = _submitQueuedTestProposal(voters, targets, values, signatures, calldatas, whitelistedProposer);
 
         Proposal memory proposal = serpentor.proposals(proposalId);
-        bytes32 expectedTxHash = _getTrxHash(proposal.actions[0].target, proposal.actions[0].value, proposal.actions[0].signature, proposal.actions[0].callData, expectedETA);
+        bytes32 expectedTxHash = _getTrxHash(proposal.targets[0], proposal.values[0], proposal.signatures[0], proposal.calldatas[0], expectedETA);
         // assert balance of grantee before proposal execution is none
         assertEq(token.balanceOf(grantee), 0);
         assertTrue(timelock.queuedTransactions(expectedTxHash));
@@ -1053,16 +1053,16 @@ contract SerpentorBravoTest is ExtendedTest {
         serpentor.setPendingAdmin(random);
     }
 
-    function testRandomAcctCannotTakeOverThrone(address random) public {
+    function testRandomAcctCannotTakeOverAdmin(address random) public {
        vm.assume(_isNotReservedAddress(random));
         // setup
         vm.expectRevert(bytes("!pendingAdmin"));
         // execute
         vm.prank(random);
-        serpentor.acceptThrone();
+        serpentor.acceptAdmin();
     }
 
-    function testOnlyPendingAdminCanAcceptThrone(address futureAdmin) public {
+    function testOnlyPendingAdminCanAcceptAdmin(address futureAdmin) public {
         // setup
         vm.assume(_isNotReservedAddress(futureAdmin));
         address oldAdmin = serpentor.admin();
@@ -1076,7 +1076,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
         // execute
         vm.prank(futureAdmin);
-        serpentor.acceptThrone();
+        serpentor.acceptAdmin();
 
         // asserts
         assertEq(serpentor.admin(), futureAdmin);

@@ -94,7 +94,37 @@ struct Proposal:
     proposer: address
     # @notice The timestamp that the proposal will be available for execution, set once the vote succeeds
     eta: uint256
-    # @notice the ordered list of actions to be taken
+    # @notice the ordered list of target addresses for calls to be made
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS]
+    # @notice the ordered list of values (i.e. msg.value) to be passed to the calls to be made
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS]
+    # @notice the ordered list of function signatures to be called
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS]
+    # @notice the ordered list of calldatas to be passed to each call
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS]
+    # @notice The block at which voting begins: holders must delegate their votes prior to this block
+    startBlock: uint256
+    # @notice The block at which voting ends: votes must be cast prior to this block
+    endBlock: uint256
+    # @notice Current number of votes in favor of this proposal
+    forVotes: uint256
+    # @notice Current number of votes in opposition to this proposal
+    againstVotes: uint256
+    # @notice Current number of votes for abstaining for this proposal
+    abstainVotes: uint256
+    # @notice Flag marking whether the proposal has been canceled
+    canceled: bool
+    # @notice Flag marking whether the proposal has been executed
+    executed: bool
+
+struct ProposalCore:
+    # @notice Unique id for looking up a proposal
+    id: uint256
+    # @notice Creator of the proposal
+    proposer: address
+    # @notice The timestamp that the proposal will be available for execution, set once the vote succeeds
+    eta: uint256
+    # @notice the ordered list of ProposalActions to be executed
     actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]
     # @notice The block at which voting begins: holders must delegate their votes prior to this block
     startBlock: uint256
@@ -110,6 +140,7 @@ struct Proposal:
     canceled: bool
     # @notice Flag marking whether the proposal has been executed
     executed: bool
+
 
 # @notice empress for this contract
 admin: public(address)
@@ -135,12 +166,12 @@ timelock: public(immutable(address))
 token: public(immutable(address))
 # @notice The total number of proposals
 proposalCount: public(uint256)
-# @notice The storage record of all proposals ever proposed
-proposals: public(HashMap[uint256, Proposal])
 # @notice The latest proposal for each proposer
 latestProposalIds: public(HashMap[address, uint256])
 #  @notice Stores the expiration of account whitelist status as a timestamp
 whitelistAccountExpirations: public(HashMap[address, uint256])
+# @notice The storage record of all proposals ever proposed
+_proposals: HashMap[uint256, ProposalCore]
 #  @notice Receipts of ballots for the entire set of voters, proposal_id -> voter_address -> receipt
 receipts: HashMap[uint256, HashMap[address, Receipt]]
 
@@ -307,7 +338,7 @@ def propose(
             calldata: calldatas[i]
         }))
 
-    newProposal: Proposal = Proposal({
+    newProposal: ProposalCore = ProposalCore({
         id: self.proposalCount,
         proposer: msg.sender,
         eta: 0,
@@ -321,7 +352,7 @@ def propose(
         executed: False
     })
 
-    self.proposals[newProposal.id] = newProposal
+    self._proposals[newProposal.id] = newProposal
     self.latestProposalIds[newProposal.proposer] = newProposal.id
 
     log ProposalCreated(newProposal.id, msg.sender, targets,values, signatures, calldatas, startBlock, endBlock, description)
@@ -337,9 +368,9 @@ def queue(proposalId: uint256):
     """
     assert self._state(proposalId) == ProposalState.SUCCEEDED, "!succeeded"
     eta: uint256 = block.timestamp + Timelock(timelock).delay()
-    for action in self.proposals[proposalId].actions:
+    for action in self._proposals[proposalId].actions:
         self._queueOrRevertInternal(action, eta)    
-    self.proposals[proposalId].eta = eta
+    self._proposals[proposalId].eta = eta
     log ProposalQueued(proposalId, eta)
 
 @external
@@ -350,9 +381,9 @@ def execute(proposalId: uint256):
     @param proposalId The id of the proposal to execute
     """
     assert self._state(proposalId) == ProposalState.QUEUED, "!queued"
-    proposalEta: uint256 = self.proposals[proposalId].eta
-    self.proposals[proposalId].executed = True
-    for action in self.proposals[proposalId].actions:
+    proposalEta: uint256 = self._proposals[proposalId].eta
+    self._proposals[proposalId].executed = True
+    for action in self._proposals[proposalId].actions:
         Timelock(timelock).executeTransaction(action.target, action.value, action.signature, action.calldata, proposalEta, value=action.value)
     
     log ProposalExecuted(proposalId)
@@ -365,8 +396,8 @@ def cancel(proposalId: uint256):
     """ 
     assert self._state(proposalId) != ProposalState.EXECUTED, "!cancel_executed"
     # proposer can cancel
-    proposer: address = self.proposals[proposalId].proposer
-    proposalEta: uint256 = self.proposals[proposalId].eta
+    proposer: address = self._proposals[proposalId].proposer
+    proposalEta: uint256 = self._proposals[proposalId].eta
 
     if msg.sender != proposer:
         # Whitelisted proposers can't be canceled for falling below proposal threshold unless msg.sender is knight
@@ -375,8 +406,8 @@ def cancel(proposalId: uint256):
         else:
             assert GovToken(token).getPriorVotes(proposer, block.number - 1) < self.proposalThreshold, "!threshold"
 
-    self.proposals[proposalId].canceled = True   
-    for action in self.proposals[proposalId].actions:
+    self._proposals[proposalId].canceled = True   
+    for action in self._proposals[proposalId].actions:
         Timelock(timelock).cancelTransaction(action.target, action.value, action.signature, action.calldata, proposalEta)
 
     log ProposalCanceled(proposalId)
@@ -490,7 +521,7 @@ def setPendingAdmin(newPendingAdmin: address):
     log NewPendingAdmin(oldPendingAdmin, newPendingAdmin)
 
 @external
-def acceptThrone():
+def acceptAdmin():
     """
     @notice Accepts transfer of crown and governor rights
     @dev msg.sender must be pendingAdmin
@@ -583,7 +614,7 @@ def getActions(proposalId: uint256) -> (
     signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS] = []
     calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS] = []
 
-    actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS] = self.proposals[proposalId].actions
+    actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS] = self._proposals[proposalId].actions
 
     numActions: uint256 = len(actions)
 
@@ -633,6 +664,44 @@ def domainSeparator() -> bytes32:
     return self._domainSeparator()
 
 @external
+@view 
+def proposals(proposalId: uint256) -> Proposal:
+    """
+    @notice Gets a Proposal By ID
+    @return Proposal Struct
+    """
+    proposal: ProposalCore  = self._proposals[proposalId]
+
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS] = []
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS] = []
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS] = []
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS] = []
+
+    for action in proposal.actions:
+        targets.append(action.target)
+        values.append(action.value)
+        signatures.append(action.signature)
+        calldatas.append(action.calldata)
+    
+    return Proposal({
+        id: proposal.id,
+        proposer: proposal.proposer,
+        eta: proposal.eta,
+        targets: targets,
+        values: values,
+        signatures: signatures,
+        calldatas: calldatas,
+        startBlock: proposal.startBlock,
+        endBlock: proposal.endBlock,
+        forVotes: proposal.forVotes,
+        againstVotes: proposal.againstVotes,
+        abstainVotes: proposal.abstainVotes,
+        canceled: proposal.canceled,
+        executed: proposal.executed
+    })
+
+
+@external
 @view
 def name() -> String[20]:
     return NAME
@@ -669,14 +738,14 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
     assert support <= 2, "!vote_type" 
     assert self._getHasVoted(proposalId, voter) == False, "!hasVoted"
     # @dev use min of current block and proposal startBlock instead ?
-    votes:uint256 = GovToken(token).getPriorVotes(voter, self.proposals[proposalId].startBlock)
+    votes:uint256 = GovToken(token).getPriorVotes(voter, self._proposals[proposalId].startBlock)
     
     if support == 0:
-        self.proposals[proposalId].againstVotes += votes
+        self._proposals[proposalId].againstVotes += votes
     elif support == 1:
-        self.proposals[proposalId].forVotes += votes
+        self._proposals[proposalId].forVotes += votes
     elif support == 2:
-        self.proposals[proposalId].abstainVotes += votes
+        self._proposals[proposalId].abstainVotes += votes
 
     self.receipts[proposalId][voter].hasVoted = True
     self.receipts[proposalId][voter].support = support
@@ -689,19 +758,19 @@ def _vote(voter: address, proposalId: uint256, support: uint8) -> uint256:
 def _state(proposalId: uint256) -> ProposalState:
     assert self.proposalCount >= proposalId and proposalId > INITIAL_PROPOSAL_ID, "!proposalId"
 
-    if self.proposals[proposalId].canceled:
+    if self._proposals[proposalId].canceled:
         return ProposalState.CANCELED
-    elif block.number <= self.proposals[proposalId].startBlock:
+    elif block.number <= self._proposals[proposalId].startBlock:
         return ProposalState.PENDING
-    elif block.number <= self.proposals[proposalId].endBlock:
+    elif block.number <= self._proposals[proposalId].endBlock:
         return ProposalState.ACTIVE
-    elif self.proposals[proposalId].forVotes <= self.proposals[proposalId].againstVotes or self.proposals[proposalId].forVotes < QUORUM_VOTES:
+    elif self._proposals[proposalId].forVotes <= self._proposals[proposalId].againstVotes or self._proposals[proposalId].forVotes < QUORUM_VOTES:
         return ProposalState.DEFEATED
-    elif self.proposals[proposalId].eta == 0:
+    elif self._proposals[proposalId].eta == 0:
          return ProposalState.SUCCEEDED
-    elif self.proposals[proposalId].executed:
+    elif self._proposals[proposalId].executed:
         return ProposalState.EXECUTED
-    elif block.timestamp > self.proposals[proposalId].eta + Timelock(timelock).GRACE_PERIOD():
+    elif block.timestamp > self._proposals[proposalId].eta + Timelock(timelock).GRACE_PERIOD():
         return ProposalState.EXPIRED
     else:
         return ProposalState.QUEUED
