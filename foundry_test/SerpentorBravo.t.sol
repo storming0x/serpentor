@@ -41,7 +41,7 @@ contract SerpentorBravoTest is ExtendedTest {
     uint256 public constant transferAmount = 1e18;
     uint public delay = 2 days;
 
-    address public queen = address(1);
+    address public admin = address(1);
     address public proposer = address(2);
     address public smallVoter = address(3);
     address public mediumVoter = address(4);
@@ -86,7 +86,7 @@ contract SerpentorBravoTest is ExtendedTest {
     event VotingPeriodSet(uint256 oldVotingPeriod, uint256 newVotingPeriod);
     event ProposalThresholdSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
 
-    event NewQueen(address indexed oldQueen, address indexed newQueen);
+    event NewAdmin(address indexed oldAdmin, address indexed newAdmin);
     event NewKnight(address indexed oldKnight, address indexed newKnight);    
 
     function setUp() public {
@@ -95,7 +95,7 @@ contract SerpentorBravoTest is ExtendedTest {
         console.log("address for token: ", address(token));
 
         // deploy timelock
-        bytes memory timelockArgs = abi.encode(queen, delay);
+        bytes memory timelockArgs = abi.encode(admin, delay);
         timelock = Timelock(vyperDeployer.deployContract("src/", "Timelock", timelockArgs));
         console.log("address for timelock: ", address(timelock));
 
@@ -159,8 +159,8 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(serpentor.proposalThreshold(), THRESHOLD);
         assertEq(serpentor.quorumVotes(), QUORUM_VOTES);
         assertEq(serpentor.initialProposalId(), 0);
-        assertEq(serpentor.queen(), address(timelock));
-        assertEq(serpentor.pendingQueen(), address(0));
+        assertEq(serpentor.admin(), address(timelock));
+        assertEq(serpentor.pendingAdmin(), address(0));
         assertEq(timelock.admin(), address(serpentor));
         assertEq(serpentor.knight(), knight);
         assertTrue(serpentor.isWhitelisted(whitelistedProposer));
@@ -557,7 +557,7 @@ contract SerpentorBravoTest is ExtendedTest {
         assertEq(state,uint8(ProposalState.CANCELED));
     }
 
-    function testSetWhitelistedAccountAsQueen(address randomAcct, uint256 expiration) public {
+    function testSetWhitelistedAccountAsAdmin(address randomAcct, uint256 expiration) public {
         // setup
         vm.assume(_isNotReservedAddress(randomAcct));
         vm.assume(expiration > block.timestamp + 10 days && expiration < type(uint128).max);
@@ -974,7 +974,7 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingPeriod >= MIN_VOTING_PERIOD && newVotingPeriod <= MAX_VOTING_PERIOD);
         // setup
-        vm.expectRevert(bytes("!queen"));
+        vm.expectRevert(bytes("!admin"));
         // execute
         vm.prank(random);
         serpentor.setVotingPeriod(newVotingPeriod);
@@ -983,11 +983,11 @@ contract SerpentorBravoTest is ExtendedTest {
     function testCannotSetVotingPeriodOutsideRange(address random, uint32 newVotingPeriod) public {
         vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingPeriod == 0 || newVotingPeriod == 1 || newVotingPeriod > MAX_VOTING_PERIOD);
-        address currentQueen = serpentor.queen();
+        address currentAdmin = serpentor.admin();
         // setup
         vm.expectRevert(bytes("!votingPeriod"));
         // execute
-        hoax(currentQueen);
+        hoax(currentAdmin);
         serpentor.setVotingPeriod(newVotingPeriod);
     }
 
@@ -995,13 +995,13 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingPeriod >= MIN_VOTING_PERIOD && newVotingPeriod <= MAX_VOTING_PERIOD);
         // setup
-        address currentQueen = serpentor.queen();
+        address currentAdmin = serpentor.admin();
         uint256 oldVotingPeriod = serpentor.votingPeriod();
         // setup event
         vm.expectEmit(false, false, false, false);
         emit VotingPeriodSet(oldVotingPeriod, newVotingPeriod);
         // execute
-        vm.prank(currentQueen);
+        vm.prank(currentAdmin);
         serpentor.setVotingPeriod(newVotingPeriod);
 
         // asserts
@@ -1012,7 +1012,7 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(_isNotReservedAddress(random));
         vm.assume(newProposalThreshold >= MIN_PROPOSAL_THRESHOLD && newProposalThreshold <= MAX_PROPOSAL_THRESHOLD);
         // setup
-        vm.expectRevert(bytes("!queen"));
+        vm.expectRevert(bytes("!admin"));
         // execute
         hoax(random);
         serpentor.setProposalThreshold(newProposalThreshold);
@@ -1020,73 +1020,73 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testCannotSetProposalThresholdOutsideRange(uint32 newProposalThreshold) public {
         vm.assume(newProposalThreshold == 0 || newProposalThreshold == 1 || newProposalThreshold > MAX_PROPOSAL_THRESHOLD);
-        address currentQueen = serpentor.queen();
+        address currentAdmin = serpentor.admin();
         // setup
         vm.expectRevert(bytes("!threshold"));
         // execute
-        hoax(currentQueen);
+        hoax(currentAdmin);
         serpentor.setProposalThreshold(newProposalThreshold);
     }
 
     function testShouldSetProposalThreshold(uint256 newProposalThreshold) public {
         vm.assume(newProposalThreshold >= MIN_PROPOSAL_THRESHOLD && newProposalThreshold <= MAX_PROPOSAL_THRESHOLD);
         // setup
-        address currentQueen = serpentor.queen();
+        address currentAdmin = serpentor.admin();
         uint256 oldProposalThreshold = serpentor.proposalThreshold();
         // setup event
         vm.expectEmit(false, false, false, false);
         emit ProposalThresholdSet(oldProposalThreshold, newProposalThreshold);
         // execute
-        vm.prank(currentQueen);
+        vm.prank(currentAdmin);
         serpentor.setProposalThreshold(newProposalThreshold);
 
         // asserts
         assertEq(serpentor.proposalThreshold(), newProposalThreshold);
     }
 
-    function testRandomAcctCannotSetNewQueen(address random) public {
+    function testRandomAcctCannotSetNewAdmin(address random) public {
         vm.assume(_isNotReservedAddress(random));
         // setup
-        vm.expectRevert(bytes("!queen"));
+        vm.expectRevert(bytes("!admin"));
         // execute
         vm.prank(random);
-        serpentor.setPendingQueen(random);
+        serpentor.setPendingAdmin(random);
     }
 
     function testRandomAcctCannotTakeOverThrone(address random) public {
        vm.assume(_isNotReservedAddress(random));
         // setup
-        vm.expectRevert(bytes("!pendingQueen"));
+        vm.expectRevert(bytes("!pendingAdmin"));
         // execute
         vm.prank(random);
         serpentor.acceptThrone();
     }
 
-    function testOnlyPendingQueenCanAcceptThrone(address futureQueen) public {
+    function testOnlyPendingAdminCanAcceptThrone(address futureAdmin) public {
         // setup
-        vm.assume(_isNotReservedAddress(futureQueen));
-        address oldQueen = serpentor.queen();
-        // setup pendingQueen
+        vm.assume(_isNotReservedAddress(futureAdmin));
+        address oldAdmin = serpentor.admin();
+        // setup pendingAdmin
         vm.prank(address(timelock));
-        serpentor.setPendingQueen(futureQueen);
-        assertEq(serpentor.pendingQueen(), futureQueen);
+        serpentor.setPendingAdmin(futureAdmin);
+        assertEq(serpentor.pendingAdmin(), futureAdmin);
         //setup for event checks
         vm.expectEmit(true, true, false, false);
-        emit NewQueen(oldQueen, futureQueen);
+        emit NewAdmin(oldAdmin, futureAdmin);
 
         // execute
-        vm.prank(futureQueen);
+        vm.prank(futureAdmin);
         serpentor.acceptThrone();
 
         // asserts
-        assertEq(serpentor.queen(), futureQueen);
-        assertEq(serpentor.pendingQueen(), address(0));
+        assertEq(serpentor.admin(), futureAdmin);
+        assertEq(serpentor.pendingAdmin(), address(0));
     } 
 
     function testRandomAcctCannotSetNewKnight(address random) public {
         vm.assume(_isNotReservedAddress(random));
         // setup
-        vm.expectRevert(bytes("!queen"));
+        vm.expectRevert(bytes("!admin"));
         // execute
         vm.prank(random);
         serpentor.setKnight(random);
@@ -1094,7 +1094,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function testSetNewKnight(address newKnight) public {
         vm.assume(_isNotReservedAddress(newKnight));
-        address currentQueen = serpentor.queen();
+        address currentAdmin = serpentor.admin();
         address oldKnight = serpentor.knight();
 
         //setup for event checks
@@ -1102,7 +1102,7 @@ contract SerpentorBravoTest is ExtendedTest {
         emit NewKnight(oldKnight, newKnight);
 
         // execute
-        vm.prank(currentQueen);
+        vm.prank(currentAdmin);
         serpentor.setKnight(newKnight);
     }
 
@@ -1110,10 +1110,10 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingDelay == 0 || newVotingDelay > MAXIMUM_DELAY);
         // setup
-        address currentQueen = serpentor.queen();
+        address currentAdmin = serpentor.admin();
         vm.expectRevert(bytes("!votingDelay"));
         // execute
-        vm.prank(currentQueen);
+        vm.prank(currentAdmin);
         serpentor.setVotingDelay(newVotingDelay);
     }
 
@@ -1121,7 +1121,7 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingDelay >= MINIMUM_DELAY && newVotingDelay <= MAXIMUM_DELAY);
         // setup
-        vm.expectRevert(bytes("!queen"));
+        vm.expectRevert(bytes("!admin"));
         // execute
         vm.prank(random);
         serpentor.setVotingDelay(newVotingDelay);
@@ -1131,13 +1131,13 @@ contract SerpentorBravoTest is ExtendedTest {
         vm.assume(_isNotReservedAddress(random));
         vm.assume(newVotingDelay >= MINIMUM_DELAY && newVotingDelay <= MAXIMUM_DELAY);
         // setup
-        address currentQueen = serpentor.queen();
+        address currentAdmin = serpentor.admin();
         uint256 oldVotingDelay = serpentor.votingDelay();
         // setup event
         vm.expectEmit(false, false, false, false);
         emit VotingDelaySet(oldVotingDelay, newVotingDelay);
         // execute
-        vm.prank(currentQueen);
+        vm.prank(currentAdmin);
         serpentor.setVotingDelay(newVotingDelay);
 
         // asserts
@@ -1310,7 +1310,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
     function _setupReservedAddress() internal {
         reservedList = [
-            queen, 
+            admin, 
             proposer,
             smallVoter, 
             mediumVoter, 

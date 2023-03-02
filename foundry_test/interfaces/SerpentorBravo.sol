@@ -43,8 +43,8 @@ struct Receipt {
 
 interface SerpentorBravo {
     // view functions
-    function queen() external view returns (address);
-    function pendingQueen() external view returns (address);
+    function admin() external view returns (address);
+    function pendingAdmin() external view returns (address);
     function knight() external view returns (address);
     function timelock() external view returns (address);
     function token() external view returns (address);
@@ -66,7 +66,7 @@ interface SerpentorBravo {
     function name() external view returns (string memory);
 
     // state changing funcs
-    function setPendingQueen(address newQueen) external;
+    function setPendingAdmin(address newAdmin) external;
     function acceptThrone() external;
     function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) external returns (uint256);
     function cancel(uint256 proposalId) external;

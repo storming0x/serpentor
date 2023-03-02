@@ -112,9 +112,9 @@ struct Proposal:
     executed: bool
 
 # @notice empress for this contract
-queen: public(address)
+admin: public(address)
 # @notice pending empress for this contract
-pendingQueen: public(address)
+pendingAdmin: public(address)
 # @notice whitelist guardian role for this contract
 knight: public(address)
 
@@ -205,15 +205,15 @@ event WhitelistAccountExpirationSet:
     account: indexed(address)
     expiration: uint256
 
-# @notice Event emitted when pendingQueen is set
-event NewPendingQueen:
-    oldPendingQueen: indexed(address)
-    newPendingQueen: indexed(address)
+# @notice Event emitted when pendingAdmin is set
+event NewPendingAdmin:
+    oldPendingAdmin: indexed(address)
+    newPendingAdmin: indexed(address)
 
-# @notice Event emitted when new queen is set
-event NewQueen:
-    oldQueen: indexed(address)
-    newQueen: indexed(address)
+# @notice Event emitted when new admin is set
+event NewAdmin:
+    oldAdmin: indexed(address)
+    newAdmin: indexed(address)
 
 # @notice Event emitted when knight is set
 event NewKnight:
@@ -223,7 +223,7 @@ event NewKnight:
 @external
 def __init__(
     timelockAddr: address, 
-    queen: address,
+    admin: address,
     tokenAddr: address,
     votingPeriod: uint256,
     votingDelay: uint256,
@@ -245,11 +245,11 @@ def __init__(
     """
     assert timelockAddr != empty(address), "!timelock"
     assert tokenAddr != empty(address), "!token"
-    assert queen != empty(address), "!queen"
+    assert admin != empty(address), "!admin"
     assert votingPeriod >= MIN_VOTING_PERIOD and votingPeriod <= MAX_VOTING_PERIOD, "!votingPeriod"
     assert votingDelay >= MIN_VOTING_DELAY and votingDelay <= MAX_VOTING_DELAY, "!votingDelay"
     assert proposalThreshold >= MIN_PROPOSAL_THRESHOLD and proposalThreshold <= MAX_PROPOSAL_THRESHOLD, "!proposalThreshold"
-    self.queen = queen
+    self.admin = admin
     self.votingPeriod = votingPeriod
     self.votingDelay = votingDelay
     self.proposalThreshold = proposalThreshold
@@ -430,7 +430,7 @@ def setVotingDelay(newVotingDelay: uint256):
     @notice Admin function for setting the voting delay
     @param newVotingDelay new voting delay, in blocks
     """
-    assert msg.sender == self.queen, "!queen"
+    assert msg.sender == self.admin, "!admin"
     assert newVotingDelay >= MIN_VOTING_DELAY and newVotingDelay <= MAX_VOTING_DELAY, "!votingDelay"
     oldVotingDelay: uint256 = self.votingDelay
     self.votingDelay = newVotingDelay
@@ -443,7 +443,7 @@ def setVotingPeriod(newVotingPeriod: uint256):
     @notice Admin function for setting the voting period
     @param newVotingPeriod new voting period, in blocks
     """
-    assert msg.sender == self.queen, "!queen"
+    assert msg.sender == self.admin, "!admin"
     assert newVotingPeriod >= MIN_VOTING_PERIOD and newVotingPeriod <= MAX_VOTING_PERIOD, "!votingPeriod"
     oldVotingPeriod: uint256 = self.votingPeriod
     self.votingPeriod = newVotingPeriod
@@ -456,7 +456,7 @@ def setProposalThreshold(newProposalThreshold: uint256):
     @notice Admin function for setting the proposal threshold
     @param newProposalThreshold must be in required range
     """
-    assert msg.sender == self.queen, "!queen"
+    assert msg.sender == self.admin, "!admin"
     assert newProposalThreshold >= MIN_PROPOSAL_THRESHOLD and newProposalThreshold <= MAX_PROPOSAL_THRESHOLD, "!threshold"
     oldProposalThreshold: uint256 = self.proposalThreshold
     self.proposalThreshold = newProposalThreshold
@@ -471,40 +471,40 @@ def setWhitelistAccountExpiration(account: address, expiration: uint256):
     @param expiration Expiration for account whitelist status as timestamp (if now < expiration, whitelisted)
     """
 
-    assert msg.sender == self.queen or msg.sender == self.knight, "!access"
+    assert msg.sender == self.admin or msg.sender == self.knight, "!access"
     self.whitelistAccountExpirations[account] = expiration
 
     log WhitelistAccountExpirationSet(account, expiration)
 
 @external
-def setPendingQueen(newPendingQueen: address):
+def setPendingAdmin(newPendingAdmin: address):
     """
-    @notice Begins transfer of crown and governor rights. The new queen must call `acceptThrone`
-    @dev Admin function to begin exchange of queen. The newPendingQueen must call `acceptThrone` to finalize the transfer.
-    @param newPendingQueen New pending queen.
+    @notice Begins transfer of crown and governor rights. The new admin must call `acceptThrone`
+    @dev Admin function to begin exchange of admin. The newPendingAdmin must call `acceptThrone` to finalize the transfer.
+    @param newPendingAdmin New pending admin.
     """
-    assert msg.sender == self.queen, "!queen"
-    oldPendingQueen: address = self.pendingQueen
-    self.pendingQueen = newPendingQueen
+    assert msg.sender == self.admin, "!admin"
+    oldPendingAdmin: address = self.pendingAdmin
+    self.pendingAdmin = newPendingAdmin
 
-    log NewPendingQueen(oldPendingQueen, newPendingQueen)
+    log NewPendingAdmin(oldPendingAdmin, newPendingAdmin)
 
 @external
 def acceptThrone():
     """
     @notice Accepts transfer of crown and governor rights
-    @dev msg.sender must be pendingQueen
+    @dev msg.sender must be pendingAdmin
     """
-    assert msg.sender == self.pendingQueen, "!pendingQueen"
+    assert msg.sender == self.pendingAdmin, "!pendingAdmin"
     # save values for events
-    oldQueen: address = self.queen
+    oldAdmin: address = self.admin
     # new ruler
-    self.queen = self.pendingQueen
+    self.admin = self.pendingAdmin
     # clean up
-    self.pendingQueen = empty(address)
+    self.pendingAdmin = empty(address)
 
-    log NewQueen(oldQueen, msg.sender)
-    log NewPendingQueen(msg.sender, empty(address))
+    log NewAdmin(oldAdmin, msg.sender)
+    log NewPendingAdmin(msg.sender, empty(address))
 
 
 
@@ -514,7 +514,7 @@ def setKnight(newKnight: address):
     @notice Admin function for setting the knight for this contract
     @param newKnight Account configured to be the knight, set to 0x0 to remove knight
     """
-    assert msg.sender == self.queen, "!queen"
+    assert msg.sender == self.admin, "!admin"
     oldKnight: address = self.knight
     self.knight = newKnight
 
