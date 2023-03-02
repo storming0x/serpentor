@@ -41,21 +41,7 @@ BALLOT_TYPEHASH: constant(bytes32) = keccak256("Ballot(uint256 proposalId,uint8 
 
 
 # interfaces
-
-# timelock struct
-# @notice a single transaction to be executed by the timelock
-struct Transaction:
-    # @notice the target address for calls to be made
-    target: address
-    # @notice The value (i.e. msg.value) to be passed to the calls to be made
-    amount: uint256
-    # @notice The estimated time for execution of the trx
-    eta: uint256
-    # @notice The function signature to be called
-    signature: String[METHOD_SIG_SIZE]
-    # @notice The calldata to be passed to the call
-    callData: Bytes[CALL_DATA_LEN]
-
+# @dev compatible interface for timelock implementations
 interface Timelock:
     def delay() -> uint256: view
     def GRACE_PERIOD() -> uint256: view
@@ -86,11 +72,11 @@ struct ProposalAction:
     # @notice the target address for calls to be made
     target: address
     # @notice The value (i.e. msg.value) to be passed to the calls to be made
-    amount: uint256
+    value: uint256
     # @notice The function signature to be called
     signature: String[METHOD_SIG_SIZE]
     # @notice The calldata to be passed to the call
-    callData: Bytes[CALL_DATA_LEN]
+    calldata: Bytes[CALL_DATA_LEN]
 
 # @notice Ballot receipt record for a voter
 struct Receipt:
@@ -108,7 +94,7 @@ struct Proposal:
     proposer: address
     # @notice The timestamp that the proposal will be available for execution, set once the vote succeeds
     eta: uint256
-    # @notice The ordered list of actions this proposal will execute
+    # @notice the ordered list of actions to be taken
     actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]
     # @notice The block at which voting begins: holders must delegate their votes prior to this block
     startBlock: uint256
@@ -163,11 +149,14 @@ receipts: HashMap[uint256, HashMap[address, Receipt]]
 # ///// EVENTS /////
 # @notice An event emitted when a new proposal is created
 event ProposalCreated:
-    id: uint256
+    proposalId: uint256
     proposer: indexed(address)
-    actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]
-    startBlock: uint256
-    endBlock: uint256
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS]
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS]
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS]
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS]
+    voteStart: uint256
+    voteEnd: uint256
     description: String[STR_LEN]
 
 # @notice An event emitted when a proposal has been queued in the Timelock
@@ -272,21 +261,28 @@ def __init__(
 
 @external
 def propose(
-    actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS],
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS],
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS],
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS],
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS],
     description: String[STR_LEN]
 ) -> uint256:
     """
     @notice
         Function used to propose a new proposal. Sender must have voting power above the proposal threshold
-    @param actions Array of ProposalAction struct with target, value, signature and calldata for executing
+    @param targets Array of addresses to call
+    @param values Array of values to send to each target
+    @param signatures Array of function signatures on each target
+    @param calldatas Array of calldata to call on each target
     @param description String description of the proposal
     @return Proposal id of new proposal
     """
     # check voting power or whitelist access
     assert GovToken(token).getPriorVotes(msg.sender, block.number - 1) > self.proposalThreshold or self._isWhitelisted(msg.sender), "!threshold"
 
-    assert len(actions) != 0, "!no_actions"
-    assert len(actions) <= MAX_POSSIBLE_OPERATIONS, "!too_many_actions"
+    assert len(targets) != 0, "!no_targets"
+    assert len(targets) <= MAX_POSSIBLE_OPERATIONS, "!too_many_operations"
+    assert len(targets) == len(values) and len(targets) == len(signatures) and len(targets) == len(calldatas), "!ops_length_mismatch"
 
     latestProposalId: uint256 =  self.latestProposalIds[msg.sender]
     if latestProposalId != 0:
@@ -297,6 +293,19 @@ def propose(
     endBlock: uint256 = startBlock + self.votingPeriod
 
     self.proposalCount += 1
+
+    actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS] = []
+    numActions: uint256 = len(targets)
+
+    for i in range(MAX_POSSIBLE_OPERATIONS):
+        if i >= numActions:
+            break
+        actions.append(ProposalAction({
+            target: targets[i],
+            value: values[i],
+            signature: signatures[i],
+            calldata: calldatas[i]
+        }))
 
     newProposal: Proposal = Proposal({
         id: self.proposalCount,
@@ -315,7 +324,7 @@ def propose(
     self.proposals[newProposal.id] = newProposal
     self.latestProposalIds[newProposal.proposer] = newProposal.id
 
-    log ProposalCreated(newProposal.id, msg.sender, actions, startBlock, endBlock, description)
+    log ProposalCreated(newProposal.id, msg.sender, targets,values, signatures, calldatas, startBlock, endBlock, description)
 
     return newProposal.id
 
@@ -344,7 +353,7 @@ def execute(proposalId: uint256):
     proposalEta: uint256 = self.proposals[proposalId].eta
     self.proposals[proposalId].executed = True
     for action in self.proposals[proposalId].actions:
-        Timelock(timelock).executeTransaction(action.target, action.amount, action.signature, action.callData, proposalEta, value=action.amount)
+        Timelock(timelock).executeTransaction(action.target, action.value, action.signature, action.calldata, proposalEta, value=action.value)
     
     log ProposalExecuted(proposalId)
 
@@ -368,7 +377,7 @@ def cancel(proposalId: uint256):
 
     self.proposals[proposalId].canceled = True   
     for action in self.proposals[proposalId].actions:
-        Timelock(timelock).cancelTransaction(action.target, action.amount, action.signature, action.callData, proposalEta)
+        Timelock(timelock).cancelTransaction(action.target, action.value, action.signature, action.calldata, proposalEta)
 
     log ProposalCanceled(proposalId)
 
@@ -557,13 +566,36 @@ def isWhitelisted(account: address) -> bool:
 
 @external
 @view
-def getActions(proposalId: uint256) -> DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS]:
+def getActions(proposalId: uint256) -> (
+    DynArray[address, MAX_POSSIBLE_OPERATIONS],
+    DynArray[uint256, MAX_POSSIBLE_OPERATIONS],
+    DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS],
+    DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS]
+):
     """
     @notice Gets actions of a proposal
     @param proposalId the id of the proposal
     @return Targets, values, signatures, and calldatas of the proposal actions
     """
-    return self.proposals[proposalId].actions
+
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS] = []
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS] = []
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS] = []
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS] = []
+
+    actions: DynArray[ProposalAction, MAX_POSSIBLE_OPERATIONS] = self.proposals[proposalId].actions
+
+    numActions: uint256 = len(actions)
+
+    for i in range(MAX_POSSIBLE_OPERATIONS):
+        if i >= numActions:
+            break
+        targets.append(actions[i].target)
+        values.append(actions[i].value)
+        signatures.append(actions[i].signature)
+        calldatas.append(actions[i].calldata)
+
+    return targets, values, signatures, calldatas
 
 @external
 @view
@@ -607,9 +639,9 @@ def name() -> String[20]:
 
 @internal
 def _queueOrRevertInternal(action: ProposalAction, eta: uint256):
-    trxHash: bytes32 = keccak256(_abi_encode(action.target, action.amount, action.signature, action.callData, eta))
+    trxHash: bytes32 = keccak256(_abi_encode(action.target, action.value, action.signature, action.calldata, eta))
     assert Timelock(timelock).queuedTransactions(trxHash) != True, "!duplicate_trx"
-    Timelock(timelock).queueTransaction(action.target, action.amount, action.signature, action.callData, eta)
+    Timelock(timelock).queueTransaction(action.target, action.value, action.signature, action.calldata, eta)
 
 @internal
 @view

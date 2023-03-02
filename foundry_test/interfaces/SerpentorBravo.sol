@@ -16,7 +16,7 @@ enum ProposalState {
 
 struct ProposalAction {
     address target;
-    uint256 amount;
+    uint256 value;
     string signature;  
     bytes callData;
 }
@@ -61,14 +61,14 @@ interface SerpentorBravo {
     function ordinalState(uint256 proposalId) external view returns (uint8);
     function isWhitelisted(address account) external view returns (bool);
     function getReceipt(uint256 proposalId, address voter) external view returns (Receipt memory);
-    function getActions(uint256 proposalId) external view returns (ProposalAction[] memory);
+    function getActions(uint256 proposalId) external view returns (address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas);
     function domainSeparator() external view returns (bytes32);
     function name() external view returns (string memory);
 
     // state changing funcs
     function setPendingQueen(address newQueen) external;
     function acceptThrone() external;
-    function propose(ProposalAction[] calldata actions, string calldata description) external returns (uint256);
+    function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) external returns (uint256);
     function cancel(uint256 proposalId) external;
     function setWhitelistAccountExpiration(address account, uint256 expiration) external;
     function setKnight(address newKnight) external;
