@@ -282,7 +282,7 @@ contract SerpentorBravoTest is ExtendedTest {
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(targets, values, signatures, calldatas, "send grant to contributor");
         Proposal memory proposal = serpentor.proposals(proposalId);
-        uint8 state = serpentor.ordinalState(proposalId);
+        uint8 state = serpentor.state(proposalId);
 
         // asserts
         assertEq(serpentor.proposalCount(), proposalId);
@@ -315,7 +315,7 @@ contract SerpentorBravoTest is ExtendedTest {
         
         hoax(grantProposer);
         uint256 proposalId = serpentor.propose(targets, values, signatures, calldatas, "send grant to contributor");
-        uint8 state = serpentor.ordinalState(proposalId);
+        uint8 state = serpentor.state(proposalId);
         assertTrue(state == uint8(ProposalState.PENDING));
 
         // execute
@@ -339,7 +339,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 proposalId = serpentor.propose(targets, values, signatures, calldatas, "send grant to contributor");
         // increase block.number after startBlock
         vm.roll(serpentor.votingDelay() + 2);
-        uint8 state = serpentor.ordinalState(proposalId);
+        uint8 state = serpentor.state(proposalId);
         assertEq(state,uint8(ProposalState.ACTIVE));
 
         // execute
@@ -362,7 +362,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 proposalId = serpentor.propose(targets, values, signatures, calldatas, "send grant to contributor");
         // increase block.number after startBlock
         vm.roll(serpentor.votingDelay() + 2);
-        uint8 state = serpentor.ordinalState(proposalId);
+        uint8 state = serpentor.state(proposalId);
         assertEq(state,uint8(ProposalState.ACTIVE));
         // setup event
         vm.expectEmit(false, false, false, false);
@@ -371,7 +371,7 @@ contract SerpentorBravoTest is ExtendedTest {
         // execute
         hoax(grantProposer);
         serpentor.cancel(proposalId);
-        state = serpentor.ordinalState(proposalId);
+        state = serpentor.state(proposalId);
         Proposal memory updatedProposal = serpentor.proposals(proposalId);
 
         // asserts
@@ -402,7 +402,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 proposalId = serpentor.propose(targets, values, signatures, calldatas, "send grant to contributor");
         // increase block.number after startBlock
         vm.roll(serpentor.votingDelay() + 2);
-        uint8 state = serpentor.ordinalState(proposalId);
+        uint8 state = serpentor.state(proposalId);
         assertEq(state,uint8(ProposalState.ACTIVE));
         // setup event
         vm.expectRevert(bytes("!threshold"));
@@ -444,7 +444,7 @@ contract SerpentorBravoTest is ExtendedTest {
         // execute
         hoax(randomAcct);
         serpentor.cancel(proposalId);
-        uint256 state = serpentor.ordinalState(proposalId);
+        uint256 state = serpentor.state(proposalId);
         Proposal memory updatedProposal = serpentor.proposals(proposalId);
 
         // asserts
@@ -485,7 +485,7 @@ contract SerpentorBravoTest is ExtendedTest {
         serpentor.cancel(proposalId);
 
         // asserts
-        assertEq(serpentor.ordinalState(proposalId), uint8(ProposalState.CANCELED));
+        assertEq(serpentor.state(proposalId), uint8(ProposalState.CANCELED));
         assertFalse(timelock.queuedTransactions(expectedTxHash));
     }
 
@@ -549,7 +549,7 @@ contract SerpentorBravoTest is ExtendedTest {
         hoax(knight);
         serpentor.cancel(proposalId);
 
-        uint256 state = serpentor.ordinalState(proposalId);
+        uint256 state = serpentor.state(proposalId);
         Proposal memory updatedProposal = serpentor.proposals(proposalId);
 
         // asserts
@@ -821,7 +821,7 @@ contract SerpentorBravoTest is ExtendedTest {
         Proposal memory proposal = serpentor.proposals(proposalId);
 
         // asserts
-        assertEq(serpentor.ordinalState(proposalId), uint8(ProposalState.DEFEATED));
+        assertEq(serpentor.state(proposalId), uint8(ProposalState.DEFEATED));
         assertEq(proposal.eta, 0);
     }
 
@@ -847,7 +847,7 @@ contract SerpentorBravoTest is ExtendedTest {
         bytes32 expectedTxHash = _getTrxHash(proposal.actions[0].target, proposal.actions[0].value, proposal.actions[0].signature, proposal.actions[0].callData, expectedETA);
 
         // asserts
-        assertEq(serpentor.ordinalState(proposalId), uint8(ProposalState.QUEUED));
+        assertEq(serpentor.state(proposalId), uint8(ProposalState.QUEUED));
         assertEq(proposal.eta, expectedETA);
         assertTrue(timelock.queuedTransactions(expectedTxHash));
     }
@@ -940,7 +940,7 @@ contract SerpentorBravoTest is ExtendedTest {
         proposal = serpentor.proposals(proposalId);
 
         // asserts
-        assertEq(serpentor.ordinalState(proposalId), uint8(ProposalState.EXECUTED));
+        assertEq(serpentor.state(proposalId), uint8(ProposalState.EXECUTED));
         assertFalse(timelock.queuedTransactions(expectedTxHash));
         assertEq(token.balanceOf(grantee), transferAmount);
     }
@@ -1223,7 +1223,7 @@ contract SerpentorBravoTest is ExtendedTest {
         Proposal memory proposal = serpentor.proposals(proposalId);
         vm.roll(proposal.endBlock + 2);
         
-        assertEq(serpentor.ordinalState(proposalId), uint8(ProposalState.SUCCEEDED));
+        assertEq(serpentor.state(proposalId), uint8(ProposalState.SUCCEEDED));
         expectedETA = block.timestamp + timelock.delay();
 
         //setup event
@@ -1256,7 +1256,7 @@ contract SerpentorBravoTest is ExtendedTest {
         Proposal memory proposal = serpentor.proposals(proposalId);
         vm.roll(proposal.endBlock + 2);
         
-        assertEq(serpentor.ordinalState(proposalId), uint8(ProposalState.DEFEATED));
+        assertEq(serpentor.state(proposalId), uint8(ProposalState.DEFEATED));
     }
 
     function _executeVoting(
@@ -1284,7 +1284,7 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 proposalId = serpentor.propose(targets, amounts, signatures, calldatas, "send grant to contributor");
         // increase block.number after startBlock
         vm.roll(serpentor.votingDelay() + 2);
-        uint8 state = serpentor.ordinalState(proposalId);
+        uint8 state = serpentor.state(proposalId);
         assertEq(state,uint8(ProposalState.ACTIVE));
 
         return proposalId;
@@ -1302,7 +1302,7 @@ contract SerpentorBravoTest is ExtendedTest {
         hoax(_proposer);
         uint256 proposalId = serpentor.propose(targets, amounts, signatures, calldatas, "send grant to contributor");
         // increase block.number after startBlock
-        uint8 state = serpentor.ordinalState(proposalId);
+        uint8 state = serpentor.state(proposalId);
         assertEq(state,uint8(ProposalState.PENDING));
 
         return proposalId;

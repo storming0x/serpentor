@@ -522,11 +522,11 @@ def setKnight(newKnight: address):
 
 @external
 @view
-def state(proposalId: uint256)  -> ProposalState:
+def enumState(proposalId: uint256)  -> ProposalState:
     """
     @notice returns enum value of proposalId 
     @dev when calling this method from ABI interfaces be aware enums in vyper have a different enumeration from solidity enums.
-    @dev also check `ordinalState()` method
+    @dev also check `state()` method
     @param proposalId Id of proposal
     """
     return self._state(proposalId)
@@ -534,11 +534,11 @@ def state(proposalId: uint256)  -> ProposalState:
 
 @external
 @view
-def ordinalState(proposalId: uint256) -> uint8:
+def state(proposalId: uint256) -> uint8:
     """
     @notice returns ordinal value of proposalId which is different from enum value
-    @dev function to support compatibility with solidity enums
-    @dev also check `state()` method
+    @dev function to support compatibility with solidity enums and gov contracts
+    @dev also check `enumState()` method
     @param proposalId Id of proposal
     """
     proposalState: ProposalState = self._state(proposalId)

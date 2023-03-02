@@ -57,8 +57,8 @@ interface SerpentorBravo {
     function proposalCount() external view returns (uint256);
     function proposals(uint256 proposalId) external view returns (Proposal memory);
     function latestProposalIds(address account) external view returns (uint256);
-    function state(uint256 proposalId) external view returns (ProposalState);
-    function ordinalState(uint256 proposalId) external view returns (uint8);
+    function state(uint256 proposalId) external view returns (uint8);
+    function enumState(uint256 proposalId) external view returns (ProposalState);
     function isWhitelisted(address account) external view returns (bool);
     function getReceipt(uint256 proposalId, address voter) external view returns (Receipt memory);
     function getActions(uint256 proposalId) external view returns (address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas);
