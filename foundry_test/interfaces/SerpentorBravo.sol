@@ -53,7 +53,7 @@ interface SerpentorBravo {
     function quorumVotes() external view returns (uint256);
     function proposalThreshold() external view returns (uint256);
     function initialProposalId() external view returns (uint256);
-    function proposalMaxActions() external view returns (uint256);
+    function proposalMaxOperations() external view returns (uint256);
     function proposalCount() external view returns (uint256);
     function proposals(uint256 proposalId) external view returns (Proposal memory);
     function latestProposalIds(address account) external view returns (uint256);
@@ -72,9 +72,9 @@ interface SerpentorBravo {
     function cancel(uint256 proposalId) external;
     function setWhitelistAccountExpiration(address account, uint256 expiration) external;
     function setKnight(address newKnight) external;
-    function vote(uint256 proposalId, uint8 support) external;
-    function voteWithReason(uint256 proposalId, uint8 support, string calldata reason) external;
-    function voteBySig(uint256 proposalId, uint8 support, uint8 v, bytes32 r, bytes32 s) external;
+    function castVote(uint256 proposalId, uint8 support) external;
+    function castVoteWithReason(uint256 proposalId, uint8 support, string calldata reason) external;
+    function castVoteBySig(uint256 proposalId, uint8 support, uint8 v, bytes32 r, bytes32 s) external;
     function setVotingDelay(uint256 votingDelay) external;
     function setVotingPeriod(uint256 votingPeriod) external;
     function setProposalThreshold(uint256 proposalThreshold) external;

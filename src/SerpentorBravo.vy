@@ -382,7 +382,7 @@ def cancel(proposalId: uint256):
     log ProposalCanceled(proposalId)
 
 @external
-def vote(proposalId: uint256, support: uint8):
+def castVote(proposalId: uint256, support: uint8):
     """
     @notice Cast a vote for a proposal
     @param proposalId The id of the proposal
@@ -391,7 +391,7 @@ def vote(proposalId: uint256, support: uint8):
     log VoteCast(msg.sender, proposalId, support, self._vote(msg.sender, proposalId, support), "")
 
 @external
-def voteWithReason(proposalId: uint256, support: uint8, reason: String[STR_LEN]):
+def castVoteWithReason(proposalId: uint256, support: uint8, reason: String[STR_LEN]):
     """
     @notice Cast a vote for a proposal with a reason string
     @param proposalId The id of the proposal
@@ -400,7 +400,7 @@ def voteWithReason(proposalId: uint256, support: uint8, reason: String[STR_LEN])
     log VoteCast(msg.sender, proposalId, support, self._vote(msg.sender, proposalId, support), reason)
 
 @external
-def voteBySig(proposalId: uint256, support: uint8, v: uint8, r: bytes32, s: bytes32):
+def castVoteBySig(proposalId: uint256, support: uint8, v: uint8, r: bytes32, s: bytes32):
     """
     @notice Cast a vote for a proposal by signature
     @dev External function that accepts EIP-712 signatures for voting on proposals.
@@ -610,7 +610,7 @@ def getReceipt(proposalId: uint256, voter: address) -> Receipt:
 
 @external
 @view
-def proposalMaxActions() -> uint256:
+def proposalMaxOperations() -> uint256:
     return MAX_POSSIBLE_OPERATIONS
 
 @external

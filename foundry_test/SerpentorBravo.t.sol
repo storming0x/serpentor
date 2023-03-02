@@ -229,7 +229,7 @@ contract SerpentorBravoTest is ExtendedTest {
     }
 
     function testCannotProposeTooManyActions(uint256 votes, uint8 size) public {
-        uint256 maxActions = serpentor.proposalMaxActions();
+        uint256 maxActions = serpentor.proposalMaxOperations();
         uint256 threshold = serpentor.proposalThreshold();
         // if maxActions is a big number, tests runs out of gas
         vm.assume(votes > threshold && size > maxActions && size <= maxActions + 5);
@@ -610,7 +610,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
         // execute
         hoax(voter);
-        serpentor.vote(proposalId, support); // invalid
+        serpentor.castVote(proposalId, support); // invalid
     }
 
      function testCannotVoteMoreThanOnce(uint256 votes, address voter, uint8 support) public {
@@ -627,12 +627,12 @@ contract SerpentorBravoTest is ExtendedTest {
         uint256 proposalId = _submitActiveTestProposal(targets, values, signatures, calldatas, whitelistedProposer);
         // vote first time
         hoax(voter);
-        serpentor.vote(proposalId, support); 
+        serpentor.castVote(proposalId, support); 
         vm.expectRevert(bytes("!hasVoted"));
 
         // execute
         hoax(voter);
-        serpentor.vote(proposalId, support); 
+        serpentor.castVote(proposalId, support); 
     }
 
     function testCannotVoteOnInactiveProposal(uint256 votes, address voter, uint8 support) public {
@@ -651,10 +651,10 @@ contract SerpentorBravoTest is ExtendedTest {
         
         // execute
         hoax(voter);
-        serpentor.vote(proposalId, support); 
+        serpentor.castVote(proposalId, support); 
     }
 
-    function testShouldVote(
+    function testShouldcastVote(
         uint256 votes, 
         address voter, 
         uint8 support
@@ -681,7 +681,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
         // execute
         hoax(voter);
-        serpentor.vote(proposalId, support); 
+        serpentor.castVote(proposalId, support); 
         Proposal memory proposal = serpentor.proposals(proposalId);
         Receipt memory receipt = serpentor.getReceipt(proposalId, voter);
 
@@ -719,7 +719,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
         // execute
         hoax(voter);
-        serpentor.voteWithReason(proposalId, support, "test"); 
+        serpentor.castVoteWithReason(proposalId, support, "test"); 
         Proposal memory proposal = serpentor.proposals(proposalId);
         Receipt memory receipt = serpentor.getReceipt(proposalId, voter);
 
@@ -774,7 +774,7 @@ contract SerpentorBravoTest is ExtendedTest {
 
         // execute
         hoax(address(0xdeadbeef)); // relayer
-        serpentor.voteBySig(proposalId, support, v,r,s); 
+        serpentor.castVoteBySig(proposalId, support, v,r,s); 
         Proposal memory proposal = serpentor.proposals(proposalId);
         Receipt memory receipt = serpentor.getReceipt(proposalId, voter);
 
@@ -1267,7 +1267,7 @@ contract SerpentorBravoTest is ExtendedTest {
         // execute voting
         for (uint i = 0; i < voters.length; i++) {
             hoax(voters[i]);
-            serpentor.vote(proposalId, support);
+            serpentor.castVote(proposalId, support);
         }
     }
 
