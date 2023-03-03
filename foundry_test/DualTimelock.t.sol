@@ -712,6 +712,39 @@ contract DualTimelockTest is ExtendedTest {
         assertEq(timelock.delay(), newDelay);
     }
 
+    function testShouldExecQueuedFastTrxCorrectly() public {
+        // setup
+        uint256 eta = block.timestamp + 1 days;
+        address target = address(token);
+        bytes memory callData = abi.encodeWithSelector(ERC20.transfer.selector, grantee, 1000);
+        uint256 amount = 0;
+        string memory signature = "";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(fastTrack));
+        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedFastTransactions(trxHash));
+        skip(eta + 1); // 1 pass eta
+         //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit ExecuteFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        vm.prank(address(fastTrack));
+        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+
+        // asserts
+        assertEq(token.balanceOf(grantee), 1000);
+    }
+
     function testShouldExecQueuedTrxWithSignatureCorrectly() public {
         // setup
         uint256 newDelay = 5 days;
@@ -745,6 +778,39 @@ contract DualTimelockTest is ExtendedTest {
         // asserts
         assertEq(string(response), string(""));
         assertEq(timelock.delay(), newDelay);
+    }
+
+    function testShouldExecQueuedFastTrxWithSignatureCorrectly() public {
+        // setup
+        uint256 eta = block.timestamp + 1 days;
+        address target = address(token);
+        bytes memory callData = abi.encode(grantee, 1000);
+        uint256 amount = 0;
+        string memory signature = "transfer(address,uint256)";
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(fastTrack));
+        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedFastTransactions(trxHash));
+        skip(eta + 1); // 1 pass eta
+         //setup for event checks
+        vm.expectEmit(true, true, false, false);
+        emit ExecuteFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+
+        // execute
+        vm.prank(address(fastTrack));
+        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+
+        // asserts
+        assertEq(token.balanceOf(grantee), 1000);
     }
 
     function testShouldExecQueuedTrxWithTimelockEthTransferCorrectly() public {
