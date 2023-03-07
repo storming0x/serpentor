@@ -560,6 +560,34 @@ contract DualTimelockTest is ExtendedTest {
         timelock.executeFastTransaction(target, amount, signature, "", eta);
     }
 
+    function testCannotExecFastTrxInIncorrectQueue() public {
+        // setup
+        address target = address(token);
+        bytes memory callData = abi.encodeWithSelector(ERC20.transfer.selector, grantee, 1000);
+        uint256 amount = 0;
+        string memory signature = "";
+        uint256 eta = block.timestamp + delay;
+
+        Transaction memory testTrx;
+        bytes32 expectedTrxHash;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        vm.prank(address(admin));
+        bytes32 trxHash = timelock.queueTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedTransactions(trxHash));
+        skip(eta + 1); // 1 pass eta
+        
+        vm.expectRevert(bytes("!queued_trx"));
+        // execute
+        vm.prank(address(fastTrack));
+        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+    }
+
     function testCannotExecQueuedTrxBeforeETA() public {
         // setup
         uint256 newDelay = 5 days;
