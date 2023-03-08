@@ -2,11 +2,10 @@
 pragma solidity ^0.8.16;
 
 import "@openzeppelin/token/ERC20/ERC20.sol";
+import {console} from "forge-std/console.sol";
 
 import {ExtendedTest} from "./utils/ExtendedTest.sol";
 import {VyperDeployer} from "../lib/utils/VyperDeployer.sol";
-
-import {console} from "forge-std/console.sol";
 import {DualTimelock, Transaction} from "./interfaces/DualTimelock.sol";
 import {GovToken} from "./utils/GovToken.sol";
 
