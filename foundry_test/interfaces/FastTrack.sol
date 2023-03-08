@@ -8,4 +8,5 @@ interface FastTrack {
     function token() external view returns (address);
 
     // non-view functions
+    function createMotion(address[] memory targets, uint256[] memory values, string[] memory signatures, bytes[] memory calldatas) external returns (uint256);
 }

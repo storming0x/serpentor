@@ -19,6 +19,7 @@ contract FastTrackTest is ExtendedTest {
     uint256 public delay = 2 days;
     uint256 public fastTrackDelay = 1 days;
     uint public constant QUORUM = 300e18;
+    uint256 public constant transferAmount = 1e18;
 
     address public admin = address(1);
     address public factory = address(2);
@@ -29,8 +30,23 @@ contract FastTrackTest is ExtendedTest {
     address public knight = address(7);
     address public smallVoter = address(8);
     address public grantee = address(0xABCD);
-
+    
+    // test helper fields
+    address[] public reservedList;
     mapping(address => bool) public isVoter; // for tracking duplicates in fuzzing
+    mapping(address => bool) public reserved; // for tracking duplicates in fuzzing
+
+
+    // events
+    event MotionCreated(
+        uint256 motionId, 
+        address indexed proposer,
+        address[] targets, 
+        uint256[] values, 
+        string[] signatures, 
+        bytes[] calldatas,
+        uint256 eta
+    );
 
     function setUp() public {
          // deploy token
@@ -45,6 +61,8 @@ contract FastTrackTest is ExtendedTest {
         timelock = DualTimelock(vyperDeployer.deployContract("src/", "DualTimelock", args));
         console.log("address for DualTimelock: ", address(timelock));
 
+        _setupReservedAddress();
+
         // vm traces
         vm.label(address(timelock), "DualTimelock");
         vm.label(address(token), "Token");
@@ -57,12 +75,13 @@ contract FastTrackTest is ExtendedTest {
         vm.label(knight, "knight");
         vm.label(grantee, "grantee");
 
-        // setup voting balances
+        // setup token balances
         deal(address(token), objectoor, QUORUM + 1);
         deal(address(token), smallVoter, 1e18);
         deal(address(token), mediumVoter, 10e18);
         deal(address(token), whaleVoter1, 300e18);
         deal(address(token), whaleVoter2, 250e18);
+        deal(address(token), address(timelock), 1000e18);
     }
 
     function testSetup() public {
@@ -74,5 +93,46 @@ contract FastTrackTest is ExtendedTest {
         assertEq(timelock.fastTrackDelay(), fastTrackDelay);
         assertEq(fastTrack.admin(), admin);
         assertEq(fastTrack.token(), address(token));
+    }
+
+
+    function _setupReservedAddress() internal {
+        reservedList = [
+            admin, 
+            factory,
+            smallVoter, 
+            mediumVoter, 
+            whaleVoter1, 
+            whaleVoter2, 
+            objectoor,
+            knight,
+            grantee,
+            address(0),
+            address(timelock),
+            address(fastTrack),
+            address(token)
+        ];
+        for (uint i = 0; i < reservedList.length; i++)
+             reserved[reservedList[i]] = true;
+    }
+
+    function testOnlyApprovedFactoryCanMotion(address random) public {
+        vm.assume(!reserved[random]);
+        vm.assume(random != factory);
+
+        // setup
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        string[] memory signatures = new string[](1);
+        bytes[] memory calldatas = new bytes[](1);
+        targets[0] = address(token);
+        values[0] = 0;
+        signatures[0] = "";
+        calldatas[0] = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+        vm.expectRevert(bytes("!factory"));
+
+        //execute
+        hoax(random);
+        fastTrack.createMotion(targets, values, signatures, calldatas);
     }
 }
