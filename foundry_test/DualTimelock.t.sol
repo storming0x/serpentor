@@ -332,7 +332,57 @@ contract DualTimelockTest is ExtendedTest {
             eta
         );
         //setup for expect revert
-        vm.expectRevert(bytes("!self"));
+        vm.expectRevert(bytes("!target"));
+
+        // execute
+        vm.prank(address(fastTrack));
+        timelock.queueFastTransaction(target, amount, signature, callData, eta);
+    }
+
+    function testFastTrackCannotTargetTimelockAdmin() public {
+        // setup
+        uint256 eta = block.timestamp + 1 days;
+        // cannot call timelock
+        address target = address(admin);
+        bytes memory callData = abi.encodeWithSelector(DualTimelock.setDelay.selector, 5 days);
+        uint256 amount = 0;
+        string memory signature = "";
+        bytes32 expectedTrxHash;
+        Transaction memory testTrx;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        //setup for expect revert
+        vm.expectRevert(bytes("!target"));
+
+        // execute
+        vm.prank(address(fastTrack));
+        timelock.queueFastTransaction(target, amount, signature, callData, eta);
+    }
+
+    function testFastTrackCannotTargetFastTrack() public {
+        // setup
+        uint256 eta = block.timestamp + 1 days;
+        // cannot call timelock
+        address target = address(fastTrack);
+        bytes memory callData = abi.encodeWithSelector(DualTimelock.setDelay.selector, 5 days);
+        uint256 amount = 0;
+        string memory signature = "";
+        bytes32 expectedTrxHash;
+        Transaction memory testTrx;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        //setup for expect revert
+        vm.expectRevert(bytes("!target"));
 
         // execute
         vm.prank(address(fastTrack));

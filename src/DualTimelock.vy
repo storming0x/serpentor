@@ -336,8 +336,12 @@ def queueFastTransaction(
 
     @return txHash The hash of the transaction
     """
-    assert msg.sender == self.fastTrack, "!fastTrack"
-    assert target != self, "!self"
+    # @dev minor gas savings
+    fastTrack: address = self.fastTrack
+    assert msg.sender == fastTrack, "!fastTrack"
+    assert target != fastTrack, "!target"
+    assert target != self, "!target"
+    assert target != self.admin, "!target"
     assert eta >= block.timestamp + self.fastTrackDelay, "!eta"
 
     trxHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
