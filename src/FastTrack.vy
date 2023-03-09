@@ -17,8 +17,24 @@ CALL_DATA_LEN: constant(uint256) = 16483
 METHOD_SIG_SIZE: constant(uint256) = 1024
 # @notice The maximum number of operations in a motion
 MAX_POSSIBLE_OPERATIONS: constant(uint256) = 10
+# @notice lower bound for objection threshold settings
+# @dev represented in basis points (1% = 100)
+MIN_OBJECTIONS_THRESHOLD: constant(uint256) = 100
+# @notice upper bound for objections threshold settings
+# @dev represented in basis points (30% = 3000)
+MAX_OBJECTIONS_THRESHOLD: constant(uint256) = 3000
+MIN_MOTION_DURATION: constant(uint256) = 57600 # 16 hours
 
 ### structs
+
+# @notice A struct to represent a Factory Settings
+struct Factory:
+    # @notice The objections threshold for the factory proposed motions
+    objectionsThreshold: uint256
+    # @notice the minimum time in seconds that must pass before the factory motions can be queued
+    motionDuration: uint256
+    # @notice is factory flag
+    isFactory: bool
 
 # @notice A struct to represent a motion
 struct Motion:
@@ -41,8 +57,26 @@ struct Motion:
     # @notice The number of objections against the motion
     objections: uint256
     # @notice The objection threshold to defeat the motion
+    objectionsThreshold: uint256
+    # @notice The flag to indicate if the motion has been queued
+    queued: bool
+
+# ///// EVENTS /////
+event MotionFactoryAdded:
+    factory: indexed(address)
     objectionThreshold: uint256
-    
+    motionDuration: uint256    
+
+event MotionCreated:
+    motionId: indexed(uint256)
+    proposer: indexed(address)
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS]
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS]
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS]
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS]
+    eta: uint256
+    snapshotBlock: uint256
+    objectionThreshold: uint256
 
 ### state fields
 # @notice The address of the admin
@@ -51,19 +85,12 @@ admin: public(address)
 pendingAdmin: public(address)
 # @notice The address of the governance token
 token: public(address)
-
-# @notice approved factory addresses
-factories: public(HashMap[address, bool])
 # @notice the last motion id
 lastMotionId: public(uint256)
 # @notice motions Id => Motion
 motions: public(HashMap[uint256, Motion])
-# motion settings
-# @notice the minimum time in seconds that must pass before a motion can be queued
-motionDuration: public(uint256)
-# @notive amount of votes required to defeat a motion
-objectionThreshold: public(uint256)
-
+# @notice factories addresses => Factory
+factories: public(HashMap[address, Factory])
 
 @external
 def __init__(
@@ -99,14 +126,17 @@ def createMotion(
     @return motionId: The id of the motion
     """
     assert len(targets) != 0, "!no_targets"
-    assert len(targets) <= MAX_POSSIBLE_OPERATIONS, "!too_many_operations"
-    assert len(targets) == len(values) and len(targets) == len(signatures) and len(targets) == len(calldatas), "!ops_length_mismatch"
-    assert self.factories[msg.sender], "!factory"
+    assert len(targets) <= MAX_POSSIBLE_OPERATIONS, "!too_many_ops"
+    assert len(targets) == len(values) and len(targets) == len(signatures) and len(targets) == len(calldatas), "!len_mismatch"
+    assert self.factories[msg.sender].isFactory, "!factory"
 
     # TODO: add motions limit check
 
     self.lastMotionId += 1
     motionId: uint256 = self.lastMotionId
+
+    motionDuration: uint256 = self.factories[msg.sender].motionDuration
+    objectionsThreshold: uint256 = self.factories[msg.sender].objectionsThreshold
 
     motion: Motion = Motion({
         id: motionId,
@@ -115,11 +145,55 @@ def createMotion(
         values: values,
         signatures: signatures,
         calldatas: calldatas,
-        eta: block.timestamp + self.motionDuration,
+        eta: block.timestamp + motionDuration,
         snapshotBlock: block.number,
         objections: 0,
-        objectionThreshold: self.objectionThreshold
+        objectionsThreshold: objectionsThreshold,
+        queued: False
     })
 
+    self.motions[motionId] = motion
+
+    log MotionCreated(
+        motionId,
+        msg.sender,
+        targets,
+        values,
+        signatures,
+        calldatas,
+        motion.eta,
+        motion.snapshotBlock,
+        objectionsThreshold
+    )
+
     return motionId
+
+
+@external
+def addMotionFactory(
+    factory: address,
+    objectionsThreshold: uint256,
+    motionDuration: uint256
+):
+    """
+    @notice
+        Add a factory to the list of approved factories.
+    @param factory: The address of the factory
+    @param objectionsThreshold: The objections threshold for the factory proposed motions
+    @param motionDuration: The duration for the factory motions to be queued
+    """
+    assert msg.sender == self.admin, "!admin"
+    assert not self.factories[factory].isFactory, "!factory_exists"
+    assert motionDuration >= MIN_MOTION_DURATION, "!motion_duration"
+    assert objectionsThreshold >= MIN_OBJECTIONS_THRESHOLD, "!min_objections_threshold"
+    assert objectionsThreshold <= MAX_OBJECTIONS_THRESHOLD, "!max_objections_threshold"
+
+    self.factories[factory] = Factory({
+        objectionsThreshold: objectionsThreshold,
+        motionDuration: motionDuration,
+        isFactory: True
+    })
+
+    log MotionFactoryAdded(factory, objectionsThreshold, motionDuration)
+
 
