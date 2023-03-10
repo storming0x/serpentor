@@ -22,7 +22,8 @@ contract FastTrackTest is ExtendedTest {
 
     uint256 public delay = 2 days;
     uint256 public fastTrackDelay = 1 days;
-    uint public constant QUORUM = 2000;
+    uint256 public factoryMotionDuration = 1 days;
+    uint256 public constant QUORUM = 2000;
     uint256 public constant transferAmount = 1e18;
     uint256 public constant MAX_OPERATIONS = 10;
     uint256 public constant MIN_OBJECTIONS_THRESHOLD = 100; // 1%
@@ -64,23 +65,35 @@ contract FastTrackTest is ExtendedTest {
         uint256 motionDuration
     );
 
+    event MotionQueued(
+        uint256 indexed motionId,
+        bytes32[] txHashes,
+        uint256 eta
+    );
+
     function setUp() public {
          // deploy token
         token = ERC20(new GovToken(18));
         console.log("address for GovToken: ", address(token));
+        
+        bytes memory args = abi.encode(admin, address(0), delay, fastTrackDelay);
+        timelock = DualTimelock(vyperDeployer.deployContract("src/", "DualTimelock", args));
+        console.log("address for DualTimelock: ", address(timelock));
 
-        bytes memory argsFastTrack = abi.encode(address(token), admin);
+        bytes memory argsFastTrack = abi.encode(address(token), admin, address(timelock), knight);
         fastTrack = FastTrack(vyperDeployer.deployContract("src/", "FastTrack", argsFastTrack));
         console.log("address for FastTrack: ", address(fastTrack));
 
-        bytes memory args = abi.encode(admin, address(fastTrack), delay, fastTrackDelay);
-        timelock = DualTimelock(vyperDeployer.deployContract("src/", "DualTimelock", args));
-        console.log("address for DualTimelock: ", address(timelock));
+        hoax(address(timelock));
+        timelock.setPendingFastTrack(address(fastTrack));
+        
+        hoax(address(knight));
+        fastTrack.acceptTimelockAccess();
 
         _setupReservedAddress();
         // setup factory
         hoax(admin);
-        fastTrack.addMotionFactory(factory, QUORUM, 1 days);
+        fastTrack.addMotionFactory(factory, QUORUM, factoryMotionDuration);
 
         // vm traces
         vm.label(address(timelock), "DualTimelock");
@@ -285,16 +298,12 @@ contract FastTrackTest is ExtendedTest {
 
     function testShouldCreateMotion(uint8 operations) public {
         vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
-        address[] memory targets = new address[](operations);
-        uint256[] memory values = new uint256[](operations);
-        string[] memory signatures = new string[](operations);
-        bytes[] memory calldatas = new bytes[](operations);
-        for (uint i = 0; i < operations; i++) {
-            targets[i] = address(token);
-            values[i] = 0;
-            signatures[i] = "";
-            calldatas[i] = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-        }
+        address[] memory targets;
+        uint256[] memory values;
+        string[] memory signatures;
+        bytes[] memory calldatas;
+        
+        (targets, values, signatures, calldatas, ) = _createMotionTrxs(operations);
 
         // setup
         vm.expectEmit(true, true, false, false);
@@ -312,15 +321,14 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(factory);
-        fastTrack.createMotion(targets, values, signatures, calldatas);
+        uint256 motionId = fastTrack.createMotion(targets, values, signatures, calldatas);
 
         // assert
-        Motion memory motion = fastTrack.motions(1);
+        Motion memory motion = fastTrack.motions(motionId);
         assertEq(motion.proposer, factory);
-        assertEq(motion.eta, block.number + fastTrack.factories(factory).motionDuration);
+        assertEq(motion.timeForQueue, block.timestamp + fastTrack.factories(factory).motionDuration);
         assertEq(motion.objectionsThreshold, fastTrack.factories(factory).objectionsThreshold);
         assertEq(motion.objections, 0);
-        assertEq(motion.queued, false);
         assertEq(motion.targets.length, targets.length);
         assertEq(motion.values.length, values.length);
         assertEq(motion.signatures.length, signatures.length);
@@ -332,5 +340,97 @@ contract FastTrackTest is ExtendedTest {
             assertEq(motion.calldatas[i], calldatas[i]);
         }
         assertEq(fastTrack.lastMotionId(), 1);
+    }
+    
+    function testCannotQueueMotionBeforeEta(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        vm.expectRevert(bytes("!timeForQueue"));
+
+        //execute
+        hoax(random);
+        fastTrack.queueMotion(motionId);
+    }
+
+    function testCannotQueueUnexistingMotion(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations); // motion 1
+        vm.expectRevert(bytes("!motion_exists"));
+        
+        //execute
+        hoax(random);
+        fastTrack.queueMotion(2); //2 doesnt exist
+    }
+
+    function testShouldQueueMotion(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        bytes32[] memory trxHashes;
+        (motionId, ) = _createMotion(operations);
+        Motion memory motion = fastTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.expectEmit(true, true, false, false);
+        emit MotionQueued(motionId, trxHashes, motion.timeForQueue + fastTrackDelay);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        //execute
+        hoax(random);
+        trxHashes = fastTrack.queueMotion(motionId);
+
+        //assert motiondata was deleted
+        assertEq(fastTrack.motions(motionId).id, 0);
+        // check trx hashes where correctly queued
+        for (uint i = 0; i < trxHashes.length; i++) {
+            assertEq(timelock.queuedFastTransactions(trxHashes[i]), true);
+        }
+    }
+
+
+    function _createMotionTrxs(uint256 operations) private view returns (
+        address[] memory targets, 
+        uint256[] memory values, 
+        string[] memory signatures, 
+        bytes[] memory calldatas,
+        bytes32[] memory trxHashes
+    ) {
+        targets = new address[](operations);
+        values = new uint256[](operations);
+        signatures = new string[](operations);
+        calldatas = new bytes[](operations);
+        trxHashes = new bytes32[](operations);
+        uint256 eta = block.timestamp + factoryMotionDuration + fastTrackDelay;
+        for (uint i = 0; i < operations; i++) {
+            targets[i] = address(token);
+            values[i] = 0;
+            signatures[i] = "";
+            calldatas[i] = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
+            trxHashes[i] = keccak256(abi.encodePacked(targets[i], values[i], signatures[i], calldatas[i], eta));
+        }
+        return (targets, values, signatures, calldatas, trxHashes);
+    }
+
+    function _createMotion(uint256 operations) private returns (uint256, bytes32[] memory) {
+        address [] memory targets;
+        uint256 [] memory values;
+        string[] memory signatures;
+        bytes[] memory calldatas;
+        bytes32[] memory trxHashes;
+        (targets, values, signatures, calldatas, trxHashes) = _createMotionTrxs(operations);
+
+        hoax(factory);
+        uint256 motionId = fastTrack.createMotion(targets, values, signatures, calldatas);
+
+        return (motionId, trxHashes);
     }
 }

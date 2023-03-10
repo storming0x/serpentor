@@ -25,6 +25,19 @@ MIN_OBJECTIONS_THRESHOLD: constant(uint256) = 100
 MAX_OBJECTIONS_THRESHOLD: constant(uint256) = 3000
 MIN_MOTION_DURATION: constant(uint256) = 57600 # 16 hours
 
+
+### interfaces
+
+# @dev compatible interface for DualTimelock implementations
+# @dev DualTimelock is a contract that can queue and execute transactions. Should be possible to change interface to common timelock interfaces
+interface DualTimelock:
+    def fastTrackDelay() -> uint256: view
+    def acceptFastTrack() : nonpayable
+    def queuedFastTransactions(hash: bytes32) -> bool: view
+    def queueFastTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32: nonpayable
+    def cancelFastTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256): nonpayable
+    def executeFastTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]: payable
+
 ### structs
 
 # @notice A struct to represent a Factory Settings
@@ -50,16 +63,15 @@ struct Motion:
     signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS]
     # @notice The ordered list of calldatas to be passed to each call to be made in motion
     calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS]
-    # @notice The eta for the motion
-    eta: uint256
+    # @notice The block.timestamp when the motion can be queued to timelock
+    timeForQueue: uint256
     # @notice The block number at which the motion was created
     snapshotBlock: uint256
     # @notice The number of objections against the motion
     objections: uint256
     # @notice The objection threshold to defeat the motion
     objectionsThreshold: uint256
-    # @notice The flag to indicate if the motion has been queued
-    queued: bool
+
 
 # ///// EVENTS /////
 event MotionFactoryAdded:
@@ -74,17 +86,27 @@ event MotionCreated:
     values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS]
     signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS]
     calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS]
-    eta: uint256
+    timeForQueue: uint256
     snapshotBlock: uint256
     objectionThreshold: uint256
+
+event MotionQueued:
+    motionId: indexed(uint256)
+    trxHashes: DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]
+    eta: uint256
+
 
 ### state fields
 # @notice The address of the admin
 admin: public(address)
 # @notice The address of the pending admin
 pendingAdmin: public(address)
+# @notice The address of the guardian role
+knight: public(address)
 # @notice The address of the governance token
 token: public(address)
+# @notice The address of the timelock
+timelock: public(address)
 # @notice the last motion id
 lastMotionId: public(uint256)
 # @notice motions Id => Motion
@@ -96,16 +118,21 @@ factories: public(HashMap[address, Factory])
 def __init__(
     governanceToken: address,
     admin: address,
+    timelock: address,
+    knight: address
 ):
     """
     @notice
         The constructor sets the initial admin and token address.
     @param governanceToken: The address of the governance token
     @param admin: The address of the admin
+    @param timelock: The address of the timelock this contract interacts with
     """
 
     self.admin = admin
     self.token = governanceToken
+    self.timelock = timelock
+    self.knight = knight
 
 
 @external
@@ -145,11 +172,10 @@ def createMotion(
         values: values,
         signatures: signatures,
         calldatas: calldatas,
-        eta: block.timestamp + motionDuration,
+        timeForQueue: block.timestamp + motionDuration,
         snapshotBlock: block.number,
         objections: 0,
-        objectionsThreshold: objectionsThreshold,
-        queued: False
+        objectionsThreshold: objectionsThreshold
     })
 
     self.motions[motionId] = motion
@@ -161,12 +187,49 @@ def createMotion(
         values,
         signatures,
         calldatas,
-        motion.eta,
+        motion.timeForQueue,
         motion.snapshotBlock,
         objectionsThreshold
     )
 
     return motionId
+
+@external
+def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
+    """
+    @notice
+        Queue a motion to execute a series of transactions.
+    @param motionId: The id of the motion
+    """
+    motion: Motion = self.motions[motionId]
+    assert motion.id != 0, "!motion_exists"
+    assert motion.timeForQueue <= block.timestamp, "!timeForQueue"
+ 
+    eta: uint256 = block.timestamp + DualTimelock(self.timelock).fastTrackDelay()
+
+    trxHashes: DynArray[bytes32, MAX_POSSIBLE_OPERATIONS] = []
+
+    numOperations: uint256 = len(motion.targets)
+    
+    for i in range(MAX_POSSIBLE_OPERATIONS):
+        if i >= numOperations:
+            break
+        trxHash: bytes32 = DualTimelock(self.timelock).queueFastTransaction(
+            motion.targets[i],
+            motion.values[i],
+            motion.signatures[i],
+            motion.calldatas[i],
+            eta
+        )
+
+        trxHashes.append(trxHash)
+    # remove motion from the mapping
+    self.motions[motionId] = empty(Motion)
+    
+    log MotionQueued(motionId, trxHashes, eta)
+
+    return trxHashes
+   
 
 
 @external
@@ -196,4 +259,12 @@ def addMotionFactory(
 
     log MotionFactoryAdded(factory, objectionsThreshold, motionDuration)
 
-
+@external
+def acceptTimelockAccess():
+    """
+    @notice
+        Accept the access to send trxs to timelock.
+    """
+    assert msg.sender == self.knight, "!knight"
+    DualTimelock(self.timelock).acceptFastTrack()
+    
