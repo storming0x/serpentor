@@ -19,20 +19,20 @@
 event NewAdmin:
     newAdmin: indexed(address)
 
-event NewFastTrack:
-    newFastTrack: indexed(address)
+event NewLeanTrack:
+    newLeanTrack: indexed(address)
 
 event NewPendingAdmin:
     newPendingAdmin: indexed(address)
 
-event NewPendingFastTrack:
-    newPendingFastTrack: indexed(address)
+event NewPendingLeanTrack:
+    newPendingLeanTrack: indexed(address)
 
 event NewDelay:
     newDelay: uint256
 
-event NewFastTrackDelay:
-    newFastTrackDelay: uint256
+event NewLeanTrackDelay:
+    newLeanTrackDelay: uint256
 
 event CancelTransaction:
     txHash: indexed(bytes32)
@@ -58,7 +58,7 @@ event QueueTransaction:
     data: Bytes[CALL_DATA_LEN]
     eta: uint256
 
-event QueueFastTransaction:
+event QueueRapidTransaction:
     txHash: indexed(bytes32)
     target: indexed(address)
     value: uint256
@@ -66,7 +66,7 @@ event QueueFastTransaction:
     data: Bytes[CALL_DATA_LEN]
     eta: uint256
 
-event CancelFastTransaction:
+event CancelRapidTransaction:
     txHash: indexed(bytes32)
     target: indexed(address)
     value: uint256
@@ -74,7 +74,7 @@ event CancelFastTransaction:
     data: Bytes[CALL_DATA_LEN]
     eta: uint256
 
-event ExecuteFastTransaction:
+event ExecuteRapidTransaction:
     txHash: indexed(bytes32)
     target: indexed(address)
     value: uint256
@@ -95,29 +95,29 @@ pendingAdmin: public(address)
 delay: public(uint256)
 queuedTransactions: public(HashMap[bytes32,  bool])
 
-fastTrack: public(address)
-pendingFastTrack: public(address)
-fastTrackDelay: public(uint256)
-queuedFastTransactions: public(HashMap[bytes32,  bool])
+leanTrack: public(address)
+pendingLeanTrack: public(address)
+leanTrackDelay: public(uint256)
+queuedRapidTransactions: public(HashMap[bytes32,  bool])
 
 @external
-def __init__(admin: address, fastTrack: address, delay: uint256, fastTrackDelay: uint256):
+def __init__(admin: address, leanTrack: address, delay: uint256, leanTrackDelay: uint256):
     """
     @notice Deploys the timelock with initial values
     @param admin The contract that rules over the timelock
-    @param fastTrack The contract that rules over the fast track queued transactions. Can be 0x0.
+    @param leanTrack The contract that rules over the fast track queued transactions. Can be 0x0.
     @param delay The delay for timelock
-    @param fastTrackDelay The delay for fast track timelock
+    @param leanTrackDelay The delay for fast track timelock
     """
 
     assert delay >= MINIMUM_DELAY, "Delay must exceed minimum delay"
     assert delay <= MAXIMUM_DELAY, "Delay must not exceed maximum delay"
-    assert delay > fastTrackDelay, "Delay must be greater than fast track delay"
+    assert delay > leanTrackDelay, "Delay must be greater than fast track delay"
     assert admin != empty(address), "!admin"
     self.admin = admin
-    self.fastTrack = fastTrack
+    self.leanTrack = leanTrack
     self.delay = delay
-    self.fastTrackDelay = fastTrackDelay
+    self.leanTrackDelay = leanTrackDelay
 
 
 @external
@@ -140,17 +140,17 @@ def setDelay(delay: uint256):
     log NewDelay(delay)
 
 @external
-def setFastTrackDelay(fastTrackDelay: uint256):
+def setLeanTrackDelay(leanTrackDelay: uint256):
     """
     @notice
         Updates fast track delay to new value
-    @param fastTrackDelay The delay for fast track timelock
+    @param leanTrackDelay The delay for fast track timelock
     """
     assert msg.sender == self, "!Timelock"
-    assert fastTrackDelay < self.delay, "!fastTrackDelay < delay"
-    self.fastTrackDelay = fastTrackDelay
+    assert leanTrackDelay < self.delay, "!leanTrackDelay < delay"
+    self.leanTrackDelay = leanTrackDelay
 
-    log NewFastTrackDelay(fastTrackDelay)
+    log NewLeanTrackDelay(leanTrackDelay)
 
 @external
 def acceptAdmin():
@@ -180,31 +180,31 @@ def setPendingAdmin(pendingAdmin: address):
     log NewPendingAdmin(pendingAdmin)
 
 @external 
-def acceptFastTrack():
+def acceptLeanTrack():
     """
     @notice
-        updates `pendingFastTrack` to fastTrack.
-        msg.sender must be `pendingFastTrack`
+        updates `pendingLeanTrack` to leanTrack.
+        msg.sender must be `pendingLeanTrack`
     """
-    assert msg.sender == self.pendingFastTrack, "!pendingFastTrack"
-    self.fastTrack = msg.sender
-    self.pendingFastTrack = empty(address)
-    log NewFastTrack(msg.sender)
-    log NewPendingFastTrack(empty(address))
+    assert msg.sender == self.pendingLeanTrack, "!pendingLeanTrack"
+    self.leanTrack = msg.sender
+    self.pendingLeanTrack = empty(address)
+    log NewLeanTrack(msg.sender)
+    log NewPendingLeanTrack(empty(address))
     
 
 @external
-def setPendingFastTrack(pendingFastTrack: address):
+def setPendingLeanTrack(pendingLeanTrack: address):
     """
     @notice
-       Updates `pendingFastTrack` value
+       Updates `pendingLeanTrack` value
        msg.sender must be this contract
-    @param pendingFastTrack The proposed new fast track contract for the contract
+    @param pendingLeanTrack The proposed new fast track contract for the contract
     """
     assert msg.sender == self, "!Timelock"
-    self.pendingFastTrack = pendingFastTrack
+    self.pendingLeanTrack = pendingLeanTrack
 
-    log NewPendingFastTrack(pendingFastTrack)
+    log NewPendingLeanTrack(pendingLeanTrack)
 
 @external
 def queueTransaction(
@@ -317,7 +317,7 @@ def executeTransaction(
     return response
 
 @external
-def queueFastTransaction(
+def queueRapidTransaction(
     target: address,
     amount: uint256,
     signature: String[METHOD_SIG_SIZE],
@@ -337,22 +337,22 @@ def queueFastTransaction(
     @return txHash The hash of the transaction
     """
     # @dev minor gas savings
-    fastTrack: address = self.fastTrack
-    assert msg.sender == fastTrack, "!fastTrack"
-    assert target != fastTrack, "!target"
+    leanTrack: address = self.leanTrack
+    assert msg.sender == leanTrack, "!leanTrack"
+    assert target != leanTrack, "!target"
     assert target != self, "!target"
     assert target != self.admin, "!target"
-    assert eta >= block.timestamp + self.fastTrackDelay, "!eta"
+    assert eta >= block.timestamp + self.leanTrackDelay, "!eta"
 
     trxHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
-    self.queuedFastTransactions[trxHash] = True
+    self.queuedRapidTransactions[trxHash] = True
 
-    log QueueFastTransaction(trxHash, target, amount, signature, data, eta)
+    log QueueRapidTransaction(trxHash, target, amount, signature, data, eta)
 
     return trxHash
 
 @external
-def cancelFastTransaction(
+def cancelRapidTransaction(
     target: address,
     amount: uint256,
     signature: String[METHOD_SIG_SIZE],
@@ -368,16 +368,16 @@ def cancelFastTransaction(
     @param data The data to send to the contract
     @param eta The timestamp when the transaction can be executed
     """
-    assert msg.sender == self.fastTrack, "!fastTrack"
+    assert msg.sender == self.leanTrack, "!leanTrack"
 
     trxHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
-    self.queuedFastTransactions[trxHash] = False
+    self.queuedRapidTransactions[trxHash] = False
 
-    log CancelFastTransaction(trxHash, target, amount, signature, data, eta)
+    log CancelRapidTransaction(trxHash, target, amount, signature, data, eta)
 
 @payable
 @external
-def executeFastTransaction(
+def executeRapidTransaction(
     target: address,
     amount: uint256,
     signature: String[METHOD_SIG_SIZE],
@@ -395,14 +395,14 @@ def executeFastTransaction(
 
     @return response The response from the transaction
     """
-    assert msg.sender == self.fastTrack, "!fastTrack"
+    assert msg.sender == self.leanTrack, "!leanTrack"
 
     trxHash: bytes32 = keccak256(_abi_encode(target, amount, signature, data, eta))
-    assert self.queuedFastTransactions[trxHash], "!queued_trx"
+    assert self.queuedRapidTransactions[trxHash], "!queued_trx"
     assert block.timestamp >= eta, "!eta"
     assert block.timestamp <= eta + GRACE_PERIOD, "!staled_trx"
 
-    self.queuedFastTransactions[trxHash] = False
+    self.queuedRapidTransactions[trxHash] = False
 
     callData: Bytes[MAX_DATA_LEN] = b""
 
@@ -428,7 +428,7 @@ def executeFastTransaction(
 
     assert success, "!trx_revert"
 
-    log ExecuteFastTransaction(trxHash, target, amount, signature, data, eta)
+    log ExecuteRapidTransaction(trxHash, target, amount, signature, data, eta)
 
     return response
 

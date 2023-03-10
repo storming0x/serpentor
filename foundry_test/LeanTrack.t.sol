@@ -8,20 +8,20 @@ import {ExtendedTest} from "./utils/ExtendedTest.sol";
 import {VyperDeployer} from "../lib/utils/VyperDeployer.sol";
 import {DualTimelock} from "./interfaces/DualTimelock.sol";
 import {
-    FastTrack, 
+    LeanTrack, 
     Factory,
     Motion
-} from "./interfaces/FastTrack.sol";
+} from "./interfaces/LeanTrack.sol";
 import {GovToken} from "./utils/GovToken.sol";
 
-contract FastTrackTest is ExtendedTest {
+contract LeanTrackTest is ExtendedTest {
     VyperDeployer private vyperDeployer = new VyperDeployer();
     DualTimelock private timelock;
     ERC20 private token;
-    FastTrack private fastTrack;
+    LeanTrack private leanTrack;
 
     uint256 public delay = 2 days;
-    uint256 public fastTrackDelay = 1 days;
+    uint256 public leanTrackDelay = 1 days;
     uint256 public factoryMotionDuration = 1 days;
     uint256 public constant QUORUM = 2000;
     uint256 public constant transferAmount = 1e18;
@@ -76,24 +76,24 @@ contract FastTrackTest is ExtendedTest {
         token = ERC20(new GovToken(18));
         console.log("address for GovToken: ", address(token));
         
-        bytes memory args = abi.encode(admin, address(0), delay, fastTrackDelay);
+        bytes memory args = abi.encode(admin, address(0), delay, leanTrackDelay);
         timelock = DualTimelock(vyperDeployer.deployContract("src/", "DualTimelock", args));
         console.log("address for DualTimelock: ", address(timelock));
 
-        bytes memory argsFastTrack = abi.encode(address(token), admin, address(timelock), knight);
-        fastTrack = FastTrack(vyperDeployer.deployContract("src/", "FastTrack", argsFastTrack));
-        console.log("address for FastTrack: ", address(fastTrack));
+        bytes memory argsLeanTrack = abi.encode(address(token), admin, address(timelock), knight);
+        leanTrack = LeanTrack(vyperDeployer.deployContract("src/", "LeanTrack", argsLeanTrack));
+        console.log("address for LeanTrack: ", address(leanTrack));
 
         hoax(address(timelock));
-        timelock.setPendingFastTrack(address(fastTrack));
+        timelock.setPendingLeanTrack(address(leanTrack));
         
         hoax(address(knight));
-        fastTrack.acceptTimelockAccess();
+        leanTrack.acceptTimelockAccess();
 
         _setupReservedAddress();
         // setup factory
         hoax(admin);
-        fastTrack.addMotionFactory(factory, QUORUM, factoryMotionDuration);
+        leanTrack.addMotionFactory(factory, QUORUM, factoryMotionDuration);
 
         // vm traces
         vm.label(address(timelock), "DualTimelock");
@@ -118,14 +118,14 @@ contract FastTrackTest is ExtendedTest {
 
     function testSetup() public {
         assertNeq(address(timelock), address(0));
-        assertNeq(address(fastTrack), address(0));
+        assertNeq(address(leanTrack), address(0));
 
         assertEq(address(timelock.admin()), admin);
         assertEq(timelock.delay(), delay);
-        assertEq(timelock.fastTrackDelay(), fastTrackDelay);
-        assertEq(fastTrack.admin(), admin);
-        assertEq(fastTrack.token(), address(token));
-        assertTrue(fastTrack.factories(factory).isFactory);
+        assertEq(timelock.leanTrackDelay(), leanTrackDelay);
+        assertEq(leanTrack.admin(), admin);
+        assertEq(leanTrack.token(), address(token));
+        assertTrue(leanTrack.factories(factory).isFactory);
     }
 
 
@@ -142,7 +142,7 @@ contract FastTrackTest is ExtendedTest {
             grantee,
             address(0),
             address(timelock),
-            address(fastTrack),
+            address(leanTrack),
             address(token)
         ];
         for (uint i = 0; i < reservedList.length; i++)
@@ -157,7 +157,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(random);
-        fastTrack.addMotionFactory(random, MIN_OBJECTIONS_THRESHOLD, MIN_MOTION_DURATION);
+        leanTrack.addMotionFactory(random, MIN_OBJECTIONS_THRESHOLD, MIN_MOTION_DURATION);
     }
 
     function testMotionFactoryDurationCannotBeLessThanMinimum(address random, uint256 objectionsThreshold, uint32 motionDuration) public {
@@ -170,7 +170,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(admin);
-        fastTrack.addMotionFactory(random, objectionsThreshold, motionDuration);
+        leanTrack.addMotionFactory(random, objectionsThreshold, motionDuration);
     }
 
     function testMotionFactoryObjectionsThresholdCannotBeLessThanMinimum(address random, uint256 objectionsThreshold) public {
@@ -182,7 +182,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(admin);
-        fastTrack.addMotionFactory(random, objectionsThreshold, MIN_MOTION_DURATION);
+        leanTrack.addMotionFactory(random, objectionsThreshold, MIN_MOTION_DURATION);
     }
 
     function testMotionFactoryObjectionsThresholdCannotBeGreaterThanMaximum(address random, uint256 objectionsThreshold) public {
@@ -194,7 +194,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(admin);
-        fastTrack.addMotionFactory(random, objectionsThreshold, MIN_MOTION_DURATION);
+        leanTrack.addMotionFactory(random, objectionsThreshold, MIN_MOTION_DURATION);
     }
 
     function testCannotAddFactoryTwice() public {
@@ -203,7 +203,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(admin);
-        fastTrack.addMotionFactory(factory, MIN_OBJECTIONS_THRESHOLD, 1 days);
+        leanTrack.addMotionFactory(factory, MIN_OBJECTIONS_THRESHOLD, 1 days);
     }
 
     function testShouldAddMotionFactory(address random, uint256 objectionsThreshold, uint32 motionDuration) public {
@@ -217,12 +217,12 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(admin);
-        fastTrack.addMotionFactory(random, objectionsThreshold, motionDuration);
+        leanTrack.addMotionFactory(random, objectionsThreshold, motionDuration);
 
         // assert
-        assertTrue(fastTrack.factories(random).isFactory);
-        assertEq(fastTrack.factories(random).motionDuration, motionDuration);
-        assertEq(fastTrack.factories(random).objectionsThreshold, objectionsThreshold);
+        assertTrue(leanTrack.factories(random).isFactory);
+        assertEq(leanTrack.factories(random).motionDuration, motionDuration);
+        assertEq(leanTrack.factories(random).objectionsThreshold, objectionsThreshold);
     }
 
     function testOnlyApprovedFactoryCanCreateMotion(address random) public {
@@ -242,7 +242,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(random);
-        fastTrack.createMotion(targets, values, signatures, calldatas);
+        leanTrack.createMotion(targets, values, signatures, calldatas);
     }
 
     function testCannotCreateMotionWithZeroOps() public {
@@ -255,7 +255,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(factory);
-        fastTrack.createMotion(targets, values, signatures, calldatas);
+        leanTrack.createMotion(targets, values, signatures, calldatas);
     }
 
     function testCannotCreateMotionWithDifferentLenArrays() public {
@@ -273,7 +273,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(factory);
-        fastTrack.createMotion(targets, values, signatures, calldatas);
+        leanTrack.createMotion(targets, values, signatures, calldatas);
     }
 
     function testCannotCreateMotionWithTooManyOperations() public {
@@ -293,7 +293,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(factory);
-        fastTrack.createMotion(targets, values, signatures, calldatas);
+        leanTrack.createMotion(targets, values, signatures, calldatas);
     }
 
     function testShouldCreateMotion(uint8 operations) public {
@@ -314,20 +314,20 @@ contract FastTrackTest is ExtendedTest {
             values, 
             signatures, 
             calldatas, 
-            block.timestamp + fastTrack.factories(factory).motionDuration,
+            block.timestamp + leanTrack.factories(factory).motionDuration,
             block.number,
-            fastTrack.factories(factory).objectionsThreshold
+            leanTrack.factories(factory).objectionsThreshold
         );
 
         //execute
         hoax(factory);
-        uint256 motionId = fastTrack.createMotion(targets, values, signatures, calldatas);
+        uint256 motionId = leanTrack.createMotion(targets, values, signatures, calldatas);
 
         // assert
-        Motion memory motion = fastTrack.motions(motionId);
+        Motion memory motion = leanTrack.motions(motionId);
         assertEq(motion.proposer, factory);
-        assertEq(motion.timeForQueue, block.timestamp + fastTrack.factories(factory).motionDuration);
-        assertEq(motion.objectionsThreshold, fastTrack.factories(factory).objectionsThreshold);
+        assertEq(motion.timeForQueue, block.timestamp + leanTrack.factories(factory).motionDuration);
+        assertEq(motion.objectionsThreshold, leanTrack.factories(factory).objectionsThreshold);
         assertEq(motion.objections, 0);
         assertEq(motion.targets.length, targets.length);
         assertEq(motion.values.length, values.length);
@@ -339,7 +339,7 @@ contract FastTrackTest is ExtendedTest {
             assertEq(motion.signatures[i], signatures[i]);
             assertEq(motion.calldatas[i], calldatas[i]);
         }
-        assertEq(fastTrack.lastMotionId(), 1);
+        assertEq(leanTrack.lastMotionId(), 1);
     }
     
     function testCannotQueueMotionBeforeEta(uint256 operations, address random) public {
@@ -353,7 +353,7 @@ contract FastTrackTest is ExtendedTest {
 
         //execute
         hoax(random);
-        fastTrack.queueMotion(motionId);
+        leanTrack.queueMotion(motionId);
     }
 
     function testCannotQueueUnexistingMotion(uint256 operations, address random) public {
@@ -366,7 +366,7 @@ contract FastTrackTest is ExtendedTest {
         
         //execute
         hoax(random);
-        fastTrack.queueMotion(2); //2 doesnt exist
+        leanTrack.queueMotion(2); //2 doesnt exist
     }
 
     function testShouldQueueMotion(uint256 operations, address random) public {
@@ -376,23 +376,23 @@ contract FastTrackTest is ExtendedTest {
         uint256 motionId;
         bytes32[] memory trxHashes;
         (motionId, ) = _createMotion(operations);
-        Motion memory motion = fastTrack.motions(motionId);
+        Motion memory motion = leanTrack.motions(motionId);
         assertEq(motion.id, motionId);
 
         vm.expectEmit(true, true, false, false);
-        emit MotionQueued(motionId, trxHashes, motion.timeForQueue + fastTrackDelay);
+        emit MotionQueued(motionId, trxHashes, motion.timeForQueue + leanTrackDelay);
 
         vm.warp(motion.timeForQueue); //skip to eta
 
         //execute
         hoax(random);
-        trxHashes = fastTrack.queueMotion(motionId);
+        trxHashes = leanTrack.queueMotion(motionId);
 
         //assert motiondata was deleted
-        assertEq(fastTrack.motions(motionId).id, 0);
+        assertEq(leanTrack.motions(motionId).id, 0);
         // check trx hashes where correctly queued
         for (uint i = 0; i < trxHashes.length; i++) {
-            assertEq(timelock.queuedFastTransactions(trxHashes[i]), true);
+            assertEq(timelock.queuedRapidTransactions(trxHashes[i]), true);
         }
     }
 
@@ -409,7 +409,7 @@ contract FastTrackTest is ExtendedTest {
         signatures = new string[](operations);
         calldatas = new bytes[](operations);
         trxHashes = new bytes32[](operations);
-        uint256 eta = block.timestamp + factoryMotionDuration + fastTrackDelay;
+        uint256 eta = block.timestamp + factoryMotionDuration + leanTrackDelay;
         for (uint i = 0; i < operations; i++) {
             targets[i] = address(token);
             values[i] = 0;
@@ -429,7 +429,7 @@ contract FastTrackTest is ExtendedTest {
         (targets, values, signatures, calldatas, trxHashes) = _createMotionTrxs(operations);
 
         hoax(factory);
-        uint256 motionId = fastTrack.createMotion(targets, values, signatures, calldatas);
+        uint256 motionId = leanTrack.createMotion(targets, values, signatures, calldatas);
 
         return (motionId, trxHashes);
     }

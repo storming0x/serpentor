@@ -1,14 +1,14 @@
 # @version 0.3.7
 
 """
-@title Yearn FastTrack an optimistic governance contract
+@title Yearn LeanTrack an optimistic governance contract
 @license GNU AGPLv3
 @author yearn.finance
 @notice
     A vyper implementation of on-chain voting governance contract for motion proposals and management of smart contract calls.
 """
 
-NAME: constant(String[20]) = "FastTrack"
+NAME: constant(String[20]) = "LeanTrack"
 # buffer for string descriptions. Can use ipfshash
 STR_LEN: constant(uint256) = 4000
 # these values are reasonable estimates from historical onchain data of compound and other gov systems
@@ -31,12 +31,12 @@ MIN_MOTION_DURATION: constant(uint256) = 57600 # 16 hours
 # @dev compatible interface for DualTimelock implementations
 # @dev DualTimelock is a contract that can queue and execute transactions. Should be possible to change interface to common timelock interfaces
 interface DualTimelock:
-    def fastTrackDelay() -> uint256: view
-    def acceptFastTrack() : nonpayable
-    def queuedFastTransactions(hash: bytes32) -> bool: view
-    def queueFastTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32: nonpayable
-    def cancelFastTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256): nonpayable
-    def executeFastTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]: payable
+    def leanTrackDelay() -> uint256: view
+    def acceptLeanTrack() : nonpayable
+    def queuedRapidTransactions(hash: bytes32) -> bool: view
+    def queueRapidTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32: nonpayable
+    def cancelRapidTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256): nonpayable
+    def executeRapidTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]: payable
 
 ### structs
 
@@ -205,7 +205,7 @@ def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
     assert motion.id != 0, "!motion_exists"
     assert motion.timeForQueue <= block.timestamp, "!timeForQueue"
  
-    eta: uint256 = block.timestamp + DualTimelock(self.timelock).fastTrackDelay()
+    eta: uint256 = block.timestamp + DualTimelock(self.timelock).leanTrackDelay()
 
     trxHashes: DynArray[bytes32, MAX_POSSIBLE_OPERATIONS] = []
 
@@ -214,7 +214,7 @@ def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
     for i in range(MAX_POSSIBLE_OPERATIONS):
         if i >= numOperations:
             break
-        trxHash: bytes32 = DualTimelock(self.timelock).queueFastTransaction(
+        trxHash: bytes32 = DualTimelock(self.timelock).queueRapidTransaction(
             motion.targets[i],
             motion.values[i],
             motion.signatures[i],
@@ -266,5 +266,5 @@ def acceptTimelockAccess():
         Accept the access to send trxs to timelock.
     """
     assert msg.sender == self.knight, "!knight"
-    DualTimelock(self.timelock).acceptFastTrack()
+    DualTimelock(self.timelock).acceptLeanTrack()
     

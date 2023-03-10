@@ -21,7 +21,7 @@ struct Motion {
     uint256 objectionsThreshold;
 }
 
-interface FastTrack {
+interface LeanTrack {
     // view functions
     function admin() external view returns (address);
     function pendingAdmin() external view returns (address);
