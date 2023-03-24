@@ -5,7 +5,7 @@
 @license GNU AGPLv3
 @author yearn.finance
 @notice
-    A vyper implementation of on-chain voting governance contract for motion proposals and management of smart contract calls.
+    A vyper implementation of on-chain optimistic governance contract for motion proposals and management of smart contract calls.
 """
 
 NAME: constant(String[20]) = "LeanTrack"
@@ -63,7 +63,7 @@ struct Motion:
     signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS]
     # @notice The ordered list of calldatas to be passed to each call to be made in motion
     calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS]
-    # @notice The block.timestamp when the motion can be queued to timelock
+    # @notice The block.timestamp when the motion can be queued to the timelock 
     timeForQueue: uint256
     # @notice The block number at which the motion was created
     snapshotBlock: uint256
@@ -71,13 +71,35 @@ struct Motion:
     objections: uint256
     # @notice The objection threshold to defeat the motion
     objectionsThreshold: uint256
+    # @notice The timestamp for when the motion can be executed in timelock
+    eta: uint256
+    # @notice The flag to indicate if the motion has been queued to the timelock
+    isQueued: bool
 
 
 # ///// EVENTS /////
 event MotionFactoryAdded:
     factory: indexed(address)
     objectionThreshold: uint256
-    motionDuration: uint256    
+    motionDuration: uint256  
+
+event MotionFactoryRemoved:
+    factory: indexed(address)  
+
+event ExecutorAdded:
+    executor: indexed(address)
+
+event ExecutorRemoved:
+    executor: indexed(address)
+
+event Paused:
+    account: indexed(address)
+
+event Unpaused:
+    account: indexed(address)
+
+event KnightSet:
+    knight: indexed(address)
 
 event MotionCreated:
     motionId: indexed(uint256)
@@ -95,6 +117,9 @@ event MotionQueued:
     trxHashes: DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]
     eta: uint256
 
+event MotionEnacted:
+    motionId: indexed(uint256)
+
 
 ### state fields
 # @notice The address of the admin
@@ -103,6 +128,8 @@ admin: public(address)
 pendingAdmin: public(address)
 # @notice The address of the guardian role
 knight: public(address)
+# @notice Boolean flag to indicate if the contract is paused
+paused: public(bool)
 # @notice The address of the governance token
 token: public(address)
 # @notice The address of the timelock
@@ -113,6 +140,8 @@ lastMotionId: public(uint256)
 motions: public(HashMap[uint256, Motion])
 # @notice factories addresses => Factory
 factories: public(HashMap[address, Factory])
+# @notice allowed executors for queued motions
+executors: public(HashMap[address, bool])
 
 @external
 def __init__(
@@ -152,13 +181,13 @@ def createMotion(
 
     @return motionId: The id of the motion
     """
+    assert not self.paused, "!paused"
     assert len(targets) != 0, "!no_targets"
     assert len(targets) <= MAX_POSSIBLE_OPERATIONS, "!too_many_ops"
     assert len(targets) == len(values) and len(targets) == len(signatures) and len(targets) == len(calldatas), "!len_mismatch"
     assert self.factories[msg.sender].isFactory, "!factory"
 
     # TODO: add motions limit check
-
     self.lastMotionId += 1
     motionId: uint256 = self.lastMotionId
 
@@ -175,7 +204,9 @@ def createMotion(
         timeForQueue: block.timestamp + motionDuration,
         snapshotBlock: block.number,
         objections: 0,
-        objectionsThreshold: objectionsThreshold
+        objectionsThreshold: objectionsThreshold,
+        eta: 0,
+        isQueued: False
     })
 
     self.motions[motionId] = motion
@@ -198,11 +229,14 @@ def createMotion(
 def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
     """
     @notice
-        Queue a motion to execute a series of transactions.
+        Send motion transactions to be queued in the timelock.
+        Queue will fail if operation arguments are repeated.
     @param motionId: The id of the motion
     """
+    assert not self.paused, "!paused"
     motion: Motion = self.motions[motionId]
     assert motion.id != 0, "!motion_exists"
+    assert motion.isQueued == False, "!motion_queued"
     assert motion.timeForQueue <= block.timestamp, "!timeForQueue"
  
     eta: uint256 = block.timestamp + DualTimelock(self.timelock).leanTrackDelay()
@@ -214,6 +248,9 @@ def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
     for i in range(MAX_POSSIBLE_OPERATIONS):
         if i >= numOperations:
             break
+        # check hash doesnt exist already in timelock
+        localHash: bytes32 = keccak256(_abi_encode(motion.targets[i], motion.values[i], motion.signatures[i], motion.calldatas[i], eta))
+        assert not DualTimelock(self.timelock).queuedRapidTransactions(localHash), "!trxHash_exists"
         trxHash: bytes32 = DualTimelock(self.timelock).queueRapidTransaction(
             motion.targets[i],
             motion.values[i],
@@ -223,13 +260,44 @@ def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
         )
 
         trxHashes.append(trxHash)
-    # remove motion from the mapping
-    self.motions[motionId] = empty(Motion)
+    # check motion as queued and set eta
+    self.motions[motionId].isQueued = True
+    self.motions[motionId].eta = eta
     
     log MotionQueued(motionId, trxHashes, eta)
 
     return trxHashes
    
+@external
+def enactMotion(motionId: uint256):
+    """
+    @notice
+        Enact an already queued motion to execute a series of transactions.
+    @param motionId: The id of the motion
+    """
+    assert not self.paused, "!paused"
+    assert self.executors[msg.sender], "!executor"
+    motion: Motion = self.motions[motionId]
+    assert motion.id != 0, "!motion_exists"
+    assert motion.isQueued == True, "!motion_queued"
+    assert motion.eta <= block.timestamp, "!eta"
+
+    numOperations: uint256 = len(motion.targets)
+    for i in range(MAX_POSSIBLE_OPERATIONS):
+        if i >= numOperations:
+            break
+        DualTimelock(self.timelock).executeRapidTransaction(
+            motion.targets[i],
+            motion.values[i],
+            motion.signatures[i],
+            motion.calldatas[i],
+            motion.eta
+        )
+
+    # delete motion
+    self.motions[motionId] = empty(Motion)
+
+    log MotionEnacted(motionId)
 
 
 @external
@@ -260,6 +328,62 @@ def addMotionFactory(
     log MotionFactoryAdded(factory, objectionsThreshold, motionDuration)
 
 @external
+def removeMotionFactory(factory: address):
+    """
+    @notice
+        Remove a factory from the list of approved factories.
+    @param factory: The address of the factory
+    """
+    assert msg.sender == self.admin, "!admin"
+    assert self.factories[factory].isFactory, "!factory_exists"
+
+    self.factories[factory] = empty(Factory)
+
+    log MotionFactoryRemoved(factory)
+
+@external
+def addExecutor(executor: address):
+    """
+    @notice
+        Add an executor to the list of approved executors.
+    @param executor: The address of the executor
+    """
+    assert msg.sender == self.admin, "!admin"
+    assert not self.executors[executor], "!executor_exists"
+
+    self.executors[executor] = True
+
+    log ExecutorAdded(executor)
+
+@external
+def removeExecutor(executor: address):
+    """
+    @notice
+        Remove an executor from the list of approved executors.
+    @param executor: The address of the executor
+    """
+    assert msg.sender == self.admin, "!admin"
+    assert self.executors[executor], "!executor_exists"
+
+    self.executors[executor] = False
+
+    log ExecutorRemoved(executor)
+
+@external
+def setKnight(knight: address):
+    """
+    @notice
+        Set the knight address.
+    @param knight: The address of the knight
+    """
+    assert msg.sender == self.admin, "!admin"
+    assert knight != empty(address), "!knight"
+
+    self.knight = knight
+
+    log KnightSet(knight)
+
+@external
 def acceptTimelockAccess():
     """
     @notice
@@ -268,3 +392,28 @@ def acceptTimelockAccess():
     assert msg.sender == self.knight, "!knight"
     DualTimelock(self.timelock).acceptLeanTrack()
     
+@external
+def pause():
+    """
+    @notice
+        Emergency method to pause the contract. Only knight can pause.
+    """
+    assert msg.sender == self.knight, "!knight"
+    assert not self.paused, "!paused"
+
+    self.paused = True
+
+    log Paused(msg.sender)
+
+@external
+def unpause():
+    """
+    @notice
+        Unpause the contract. Only knight or admin can unpause.
+    """
+    assert msg.sender == self.knight, "!knight"
+    assert self.paused, "!unpaused"
+
+    self.paused = False
+
+    log Unpaused(msg.sender)

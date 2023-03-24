@@ -39,6 +39,7 @@ contract LeanTrackTest is ExtendedTest {
     address public knight = address(7);
     address public smallVoter = address(8);
     address public grantee = address(0xABCD);
+    address public executor = address(7);
     
     // test helper fields
     address[] public reservedList;
@@ -59,16 +60,36 @@ contract LeanTrackTest is ExtendedTest {
         uint256 objectionsThreshold
     );
 
+    event MotionQueued(
+        uint256 indexed motionId,
+        bytes32[] txHashes,
+        uint256 eta
+    );
+
     event MotionFactoryAdded(
         address indexed factory,
         uint256 objectionsThreshold,
         uint256 motionDuration
     );
 
-    event MotionQueued(
-        uint256 indexed motionId,
-        bytes32[] txHashes,
-        uint256 eta
+    event MotionFactoryRemoved(
+        address indexed factory
+    );
+
+    event ExecutorAdded(
+        address indexed executor
+    );
+
+    event ExecutorRemoved(
+        address indexed executor
+    );
+
+    event Paused(
+        address indexed account
+    );
+    
+    event Unpaused(
+        address indexed account
     );
 
     function setUp() public {
@@ -90,10 +111,15 @@ contract LeanTrackTest is ExtendedTest {
         hoax(address(knight));
         leanTrack.acceptTimelockAccess();
 
+
         _setupReservedAddress();
         // setup factory
         hoax(admin);
         leanTrack.addMotionFactory(factory, QUORUM, factoryMotionDuration);
+
+        // add executor
+        hoax(admin);
+        leanTrack.addExecutor(address(knight));
 
         // vm traces
         vm.label(address(timelock), "DualTimelock");
@@ -126,6 +152,8 @@ contract LeanTrackTest is ExtendedTest {
         assertEq(leanTrack.admin(), admin);
         assertEq(leanTrack.token(), address(token));
         assertTrue(leanTrack.factories(factory).isFactory);
+        assertEq(leanTrack.factories(factory).objectionsThreshold, QUORUM);
+        assertEq(leanTrack.factories(factory).motionDuration, factoryMotionDuration);
     }
 
 
@@ -245,6 +273,211 @@ contract LeanTrackTest is ExtendedTest {
         leanTrack.createMotion(targets, values, signatures, calldatas);
     }
 
+    function testShouldRemoveFactory(address random, uint256 objectionsThreshold, uint32 motionDuration) public {
+        vm.assume(!reserved[random]);
+        vm.assume(objectionsThreshold >= MIN_OBJECTIONS_THRESHOLD && objectionsThreshold <= MAX_OBJECTIONS_THRESHOLD);
+        vm.assume(motionDuration >= MIN_MOTION_DURATION); 
+
+        // setup
+        vm.expectEmit(false, false, false, false);
+        emit MotionFactoryAdded(factory, objectionsThreshold, motionDuration);
+        // add factory
+        hoax(admin);
+        leanTrack.addMotionFactory(random, objectionsThreshold, motionDuration);
+
+        // assert factory added
+        assertTrue(leanTrack.factories(random).isFactory);
+        assertEq(leanTrack.factories(random).motionDuration, motionDuration);
+        assertEq(leanTrack.factories(random).objectionsThreshold, objectionsThreshold);
+
+        // execute remove factory
+        vm.expectEmit(false, false, false, false);
+        emit MotionFactoryRemoved(random);
+
+        //execute
+        hoax(admin);
+        leanTrack.removeMotionFactory(random);
+
+        // assert factory removed
+        assertTrue(!leanTrack.factories(random).isFactory);
+    }
+
+    function testOnlyAdminCanRemoveFactory(address random, uint256 objectionsThreshold, uint32 motionDuration) public {
+        vm.assume(!reserved[random]);
+        vm.assume(objectionsThreshold >= MIN_OBJECTIONS_THRESHOLD && objectionsThreshold <= MAX_OBJECTIONS_THRESHOLD);
+        vm.assume(motionDuration >= MIN_MOTION_DURATION); 
+
+        // setup
+        vm.expectEmit(false, false, false, false);
+        emit MotionFactoryAdded(factory, objectionsThreshold, motionDuration);
+        // add factory
+        hoax(admin);
+        leanTrack.addMotionFactory(random, objectionsThreshold, motionDuration);
+
+        // assert factory added
+        assertTrue(leanTrack.factories(random).isFactory);
+        assertEq(leanTrack.factories(random).motionDuration, motionDuration);
+        assertEq(leanTrack.factories(random).objectionsThreshold, objectionsThreshold);
+
+        // setup
+        vm.expectRevert(bytes("!admin"));
+
+        //execute
+        hoax(random);
+        leanTrack.removeMotionFactory(random);
+    }
+
+    function testCannotRemoveFactoryThatDoesNotExist(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectRevert(bytes("!factory_exists"));
+
+        //execute
+        hoax(admin);
+        leanTrack.removeMotionFactory(random);
+    }
+
+    function testOnlyAdminCanAddExecutor(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectRevert(bytes("!admin"));
+
+        //execute
+        hoax(random);
+        leanTrack.addExecutor(random);
+    }
+
+    function testCannotAddExecutorTwice(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectEmit(false, false, false, false);
+        emit ExecutorAdded(random);
+
+        //execute
+        hoax(admin);
+        leanTrack.addExecutor(random);
+
+        // setup
+        vm.expectRevert(bytes("!executor_exists"));
+
+        //execute
+        hoax(admin);
+        leanTrack.addExecutor(random);
+    }
+
+    function testShouldAddExecutor(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectEmit(false, false, false, false);
+        emit ExecutorAdded(random);
+
+        //execute
+        hoax(admin);
+        leanTrack.addExecutor(random);
+
+        // assert
+        assertTrue(leanTrack.executors(random));
+    }
+
+    function testOnlyAdminCanRemoveExecutor(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectRevert(bytes("!admin"));
+
+        //execute
+        hoax(random);
+        leanTrack.removeExecutor(random);
+    }
+
+    function testCannotRemoveExecutorThatDoesNotExist(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectRevert(bytes("!executor_exists"));
+
+        //execute
+        hoax(admin);
+        leanTrack.removeExecutor(random);
+    }
+
+    function testShouldRemoveExecutor(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectEmit(false, false, false, false);
+        emit ExecutorAdded(random);
+
+        //execute
+        hoax(admin);
+        leanTrack.addExecutor(random);
+
+        // assert
+        assertTrue(leanTrack.executors(random));
+
+        // setup
+        vm.expectEmit(false, false, false, false);
+        emit ExecutorRemoved(random);
+
+        //execute
+        hoax(admin);
+        leanTrack.removeExecutor(random);
+
+        // assert
+        assertTrue(!leanTrack.executors(random));
+    }
+
+    function testOnlyAdminCanSetKnight(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectRevert(bytes("!admin"));
+
+        //execute
+        hoax(random);
+        leanTrack.setKnight(random);
+    }
+
+    function testKnightCannotBeAddressZero() public {
+        // setup
+        vm.expectRevert(bytes("!knight"));
+
+        //execute
+        hoax(admin);
+        leanTrack.setKnight(address(0));
+    }
+
+    function testOnlyKnightCanPauseLeanTrack(address random) public {
+        vm.assume(!reserved[random]);
+
+        // setup
+        vm.expectRevert(bytes("!knight"));
+
+        //execute
+        hoax(random);
+        leanTrack.pause();
+    }
+
+    function testShouldPauseLeanTrack() public {
+        // setup
+        vm.expectEmit(false, false, false, false);
+        emit Paused(knight);
+
+        //execute
+        hoax(knight);
+        leanTrack.pause();
+
+        // assert
+        assertTrue(leanTrack.paused());
+    }
+
+
+    // MOTION TESTS
+
     function testCannotCreateMotionWithZeroOps() public {
         // setup
         address[] memory targets = new address[](0);
@@ -256,6 +489,18 @@ contract LeanTrackTest is ExtendedTest {
         //execute
         hoax(factory);
         leanTrack.createMotion(targets, values, signatures, calldatas);
+    }
+
+    function testCannotCreateMotionWhenPaused() public {
+        // setup
+        hoax(knight);
+        leanTrack.pause();
+
+        vm.expectRevert(bytes("!paused"));
+
+        //execute
+        hoax(factory);
+        leanTrack.createMotion(new address[](0), new uint256[](0), new string[](0), new bytes[](0));
     }
 
     function testCannotCreateMotionWithDifferentLenArrays() public {
@@ -302,8 +547,10 @@ contract LeanTrackTest is ExtendedTest {
         uint256[] memory values;
         string[] memory signatures;
         bytes[] memory calldatas;
+        bytes32[] memory hashes;
+        uint256 totalAmount;
         
-        (targets, values, signatures, calldatas, ) = _createMotionTrxs(operations);
+        (targets, values, signatures, calldatas, hashes, totalAmount) = _createMotionTrxs(operations);
 
         // setup
         vm.expectEmit(true, true, false, false);
@@ -341,6 +588,21 @@ contract LeanTrackTest is ExtendedTest {
         }
         assertEq(leanTrack.lastMotionId(), 1);
     }
+
+    function testCannotQueueMotionWhenPaused(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        hoax(knight);
+        leanTrack.pause();
+        vm.expectRevert(bytes("!paused"));
+
+        //execute
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+    }
     
     function testCannotQueueMotionBeforeEta(uint256 operations, address random) public {
         vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
@@ -356,17 +618,18 @@ contract LeanTrackTest is ExtendedTest {
         leanTrack.queueMotion(motionId);
     }
 
-    function testCannotQueueUnexistingMotion(uint256 operations, address random) public {
+    function testCannotQueueUnexistingMotion(uint256 operations, address random, uint256 unexistingMotiondId) public {
         vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
         vm.assume(!reserved[random]);
         // setup
         uint256 motionId;
         (motionId,) = _createMotion(operations); // motion 1
+        vm.assume(unexistingMotiondId != motionId);
         vm.expectRevert(bytes("!motion_exists"));
         
         //execute
         hoax(random);
-        leanTrack.queueMotion(2); //2 doesnt exist
+        leanTrack.queueMotion(unexistingMotiondId); // doesnt exist
     }
 
     function testShouldQueueMotion(uint256 operations, address random) public {
@@ -374,26 +637,205 @@ contract LeanTrackTest is ExtendedTest {
         vm.assume(!reserved[random]);
         // setup
         uint256 motionId;
+        uint256 totalAmount;
         bytes32[] memory trxHashes;
-        (motionId, ) = _createMotion(operations);
+        address[] memory targets;
+        uint256[] memory values;
+        string[] memory signatures;
+        bytes[] memory calldatas;
+        // create test motion transactions
+        (targets, values, signatures, calldatas, trxHashes, totalAmount) = _createMotionTrxs(operations);
+
+        hoax(factory);
+        motionId = leanTrack.createMotion(targets, values, signatures, calldatas);
+        
         Motion memory motion = leanTrack.motions(motionId);
         assertEq(motion.id, motionId);
 
         vm.expectEmit(true, true, false, false);
         emit MotionQueued(motionId, trxHashes, motion.timeForQueue + leanTrackDelay);
 
+        vm.warp(motion.timeForQueue); //skip to time for queue
+
+        //execute
+        hoax(random);
+        bytes32[] memory queuedTrxHashes = leanTrack.queueMotion(motionId);
+
+        //assert motion has been queued and eta has been set
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.isQueued, true);
+        assertEq(motion.eta, motion.timeForQueue + leanTrackDelay);
+        console.log("motion.eta", motion.eta);
+        console.log("motion.timeForQueue", motion.timeForQueue);
+        console.log("leanTrackDelay", leanTrackDelay);
+        console.log("block.timestamp", block.timestamp);
+        // check trx hashes where correctly queued
+        for (uint i = 0; i < trxHashes.length; i++) {
+            assertEq(trxHashes[i], queuedTrxHashes[i]);
+            assertEq(timelock.queuedRapidTransactions(queuedTrxHashes[i]), true);
+        }
+        // check that the motion is not queued again
+        assertEq(leanTrack.motions(motionId).isQueued, true);
+    }
+
+    function testCannotQueueMotionTwice(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
         vm.warp(motion.timeForQueue); //skip to eta
 
         //execute
         hoax(random);
-        trxHashes = leanTrack.queueMotion(motionId);
+        leanTrack.queueMotion(motionId);
 
-        //assert motiondata was deleted
-        assertEq(leanTrack.motions(motionId).id, 0);
-        // check trx hashes where correctly queued
-        for (uint i = 0; i < trxHashes.length; i++) {
-            assertEq(timelock.queuedRapidTransactions(trxHashes[i]), true);
-        }
+        vm.expectRevert(bytes("!motion_queued"));
+        leanTrack.queueMotion(motionId);
+    }
+
+    function testCannotEnactMotionWhenPaused(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        //execute
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+
+        hoax(knight);
+        leanTrack.pause();
+        vm.expectRevert(bytes("!paused"));
+
+        //execute
+        hoax(executor); 
+        leanTrack.enactMotion(motionId);
+    }
+
+    function testOnlyExecutorsCanCallEnactMotion(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        //execute
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+
+        vm.expectRevert(bytes("!executor"));
+        hoax(random);
+        leanTrack.enactMotion(motionId);
+    }
+
+    function testCannotEnactUnexistingMotion(uint256 operations, address random, uint256 unexistingMotiondId) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations); // motion 1
+        vm.assume(unexistingMotiondId != motionId);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        //execute
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+
+        vm.expectRevert(bytes("!motion_exists"));
+        hoax(executor); 
+        leanTrack.enactMotion(unexistingMotiondId); // doesnt exist
+    }
+
+    function testCannotEnactMotionThatIsntQueued(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.expectRevert(bytes("!motion_queued"));
+        hoax(executor); 
+        leanTrack.enactMotion(motionId);
+    }
+
+    function testCannotEnactMotionBeforeEta(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        //execute
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+
+        vm.expectRevert(bytes("!eta"));
+        hoax(executor); 
+        leanTrack.enactMotion(motionId); // not enough time has passed since delay
+    }
+
+    function testShouldEnactQueuedMotion(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        uint256 expectedAmount;
+        address[] memory targets;
+        uint256[] memory values;
+        string[] memory signatures;
+        bytes[] memory calldatas;
+        bytes32[] memory trxHashes;
+        uint256 eta = block.timestamp + factoryMotionDuration + leanTrackDelay;
+        (targets, values, signatures, calldatas, trxHashes, expectedAmount) = _createMotionTrxs(operations);
+        // create motion
+        hoax(factory);
+        motionId = leanTrack.createMotion(targets, values, signatures, calldatas);
+
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        // setup queue motion
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+
+        motion = leanTrack.motions(motionId);
+        assertTrue(motion.eta != 0);
+        assertEq(motion.eta, eta);
+        vm.warp(motion.eta); //skip to eta
+
+        //execute
+        hoax(executor); 
+        leanTrack.enactMotion(motionId);
+
+        //assert motion has been enacted
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, 0);
+        // check transaction was executed
+        assertEq(token.balanceOf(grantee), expectedAmount);
     }
 
 
@@ -402,7 +844,8 @@ contract LeanTrackTest is ExtendedTest {
         uint256[] memory values, 
         string[] memory signatures, 
         bytes[] memory calldatas,
-        bytes32[] memory trxHashes
+        bytes32[] memory trxHashes,
+        uint256 totalAmount
     ) {
         targets = new address[](operations);
         values = new uint256[](operations);
@@ -414,10 +857,12 @@ contract LeanTrackTest is ExtendedTest {
             targets[i] = address(token);
             values[i] = 0;
             signatures[i] = "";
-            calldatas[i] = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount);
-            trxHashes[i] = keccak256(abi.encodePacked(targets[i], values[i], signatures[i], calldatas[i], eta));
+            // vary the amount of tokens to transfer to avoid hash collision
+            calldatas[i] = abi.encodeWithSelector(IERC20.transfer.selector, grantee, transferAmount + i); 
+            totalAmount += transferAmount + i;
+            trxHashes[i] = keccak256(abi.encode(targets[i], values[i], signatures[i], calldatas[i], eta));
         }
-        return (targets, values, signatures, calldatas, trxHashes);
+        return (targets, values, signatures, calldatas, trxHashes, totalAmount);
     }
 
     function _createMotion(uint256 operations) private returns (uint256, bytes32[] memory) {
@@ -426,7 +871,8 @@ contract LeanTrackTest is ExtendedTest {
         string[] memory signatures;
         bytes[] memory calldatas;
         bytes32[] memory trxHashes;
-        (targets, values, signatures, calldatas, trxHashes) = _createMotionTrxs(operations);
+        uint256 totalAmount;
+        (targets, values, signatures, calldatas, trxHashes, totalAmount) = _createMotionTrxs(operations);
 
         hoax(factory);
         uint256 motionId = leanTrack.createMotion(targets, values, signatures, calldatas);

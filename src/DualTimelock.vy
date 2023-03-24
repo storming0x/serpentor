@@ -105,14 +105,14 @@ def __init__(admin: address, leanTrack: address, delay: uint256, leanTrackDelay:
     """
     @notice Deploys the timelock with initial values
     @param admin The contract that rules over the timelock
-    @param leanTrack The contract that rules over the fast track queued transactions. Can be 0x0.
+    @param leanTrack The contract that rules over the lean track queued transactions. Can be 0x0.
     @param delay The delay for timelock
-    @param leanTrackDelay The delay for fast track timelock
+    @param leanTrackDelay The delay for lean track timelock
     """
 
     assert delay >= MINIMUM_DELAY, "Delay must exceed minimum delay"
     assert delay <= MAXIMUM_DELAY, "Delay must not exceed maximum delay"
-    assert delay > leanTrackDelay, "Delay must be greater than fast track delay"
+    assert delay > leanTrackDelay, "Delay must be greater than lean track delay"
     assert admin != empty(address), "!admin"
     self.admin = admin
     self.leanTrack = leanTrack
@@ -143,8 +143,8 @@ def setDelay(delay: uint256):
 def setLeanTrackDelay(leanTrackDelay: uint256):
     """
     @notice
-        Updates fast track delay to new value
-    @param leanTrackDelay The delay for fast track timelock
+        Updates lean track delay to new value
+    @param leanTrackDelay The delay for lean track timelock
     """
     assert msg.sender == self, "!Timelock"
     assert leanTrackDelay < self.delay, "!leanTrackDelay < delay"
@@ -199,7 +199,7 @@ def setPendingLeanTrack(pendingLeanTrack: address):
     @notice
        Updates `pendingLeanTrack` value
        msg.sender must be this contract
-    @param pendingLeanTrack The proposed new fast track contract for the contract
+    @param pendingLeanTrack The proposed new lean track contract for the contract
     """
     assert msg.sender == self, "!Timelock"
     self.pendingLeanTrack = pendingLeanTrack
@@ -326,8 +326,8 @@ def queueRapidTransaction(
 ) -> bytes32:
     """
     @notice
-        adds transaction to fast execution queue
-        fast execution queue cannot target this timelock contract
+        adds transaction to rapid execution queue
+        rapid execution queue cannot target this timelock contract
     @param target The address of the contract to execute
     @param amount The amount of ether to send to the contract
     @param signature The signature of the function to execute
@@ -361,7 +361,7 @@ def cancelRapidTransaction(
 ):
     """
     @notice
-        cancels a queued fast transaction
+        cancels a queued rapid transaction
     @param target The address of the contract to execute
     @param amount The amount of ether to send to the contract
     @param signature The signature of the function to execute
@@ -386,7 +386,7 @@ def executeRapidTransaction(
 ) -> Bytes[MAX_DATA_LEN]:
     """
     @notice
-        executes a queued fast transaction
+        executes a queued rapid transaction
     @param target The address of the contract to execute
     @param amount The amount of ether to send to the contract
     @param signature The signature of the function to execute
