@@ -2,11 +2,10 @@
 pragma solidity ^0.8.16;
 
 import "@openzeppelin/token/ERC20/ERC20.sol";
+import {console} from "forge-std/console.sol";
 
 import {ExtendedTest} from "./utils/ExtendedTest.sol";
 import {VyperDeployer} from "../lib/utils/VyperDeployer.sol";
-
-import {console} from "forge-std/console.sol";
 import {DualTimelock, Transaction} from "./interfaces/DualTimelock.sol";
 import {GovToken} from "./utils/GovToken.sol";
 
@@ -17,31 +16,31 @@ contract DualTimelockTest is ExtendedTest {
     address public admin = address(1);
     address public holder = address(2);
     address public grantee = address(3);
-    address public fastTrack = address(4);
+    address public leanTrack = address(4);
 
     uint public constant GRACE_PERIOD = 14 days;
     uint public constant MINIMUM_DELAY = 2 days;
     uint public constant MAXIMUM_DELAY = 30 days;
     uint256 public delay = 2 days;
-    uint256 public fastTrackDelay = 1 days;
+    uint256 public leanTrackDelay = 1 days;
     
     // events
 
     event NewDelay(uint256 newDelay);
-    event NewFastTrackDelay(uint256 newDelay);
+    event NewLeanTrackDelay(uint256 newDelay);
     event NewAdmin(address indexed newAdmin);
     event NewPendingAdmin(address indexed newPendingAdmin);
-    event NewFastTrack(address indexed newFastTrack);
-    event NewPendingFastTrack(address indexed newPendingFastTrack);
+    event NewLeanTrack(address indexed newLeanTrack);
+    event NewPendingLeanTrack(address indexed newPendingLeanTrack);
     event QueueTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
     event CancelTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
     event ExecuteTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
-    event QueueFastTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
-    event CancelFastTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
-    event ExecuteFastTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
+    event QueueRapidTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
+    event CancelRapidTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
+    event ExecuteRapidTransaction(bytes32 indexed txHash, address indexed target, uint value, string signature, bytes data, uint eta);
 
     function setUp() public {
-        bytes memory args = abi.encode(admin, fastTrack, delay, fastTrackDelay);
+        bytes memory args = abi.encode(admin, leanTrack, delay, leanTrackDelay);
         timelock = DualTimelock(vyperDeployer.deployContract("src/", "DualTimelock", args));
         console.log("address for DualTimelock: ", address(timelock));
 
@@ -59,10 +58,10 @@ contract DualTimelockTest is ExtendedTest {
     function testSetup() public {
         assertNeq(address(timelock), address(0));
         assertEq(address(timelock.admin()), admin);
-        assertEq(address(timelock.fastTrack()), fastTrack);
+        assertEq(address(timelock.leanTrack()), leanTrack);
         assertEq(timelock.delay(), delay);
         assertEq(timelock.delay(), MINIMUM_DELAY);
-        assertEq(timelock.fastTrackDelay(), fastTrackDelay);
+        assertEq(timelock.leanTrackDelay(), leanTrackDelay);
 
         assertEq(token.balanceOf(address(timelock)), 1000e18);
     }
@@ -75,12 +74,12 @@ contract DualTimelockTest is ExtendedTest {
         timelock.setDelay(5 days);
     }
 
-    function testRandomAcctCannotSetFastTrackDelay(address random) public {
+    function testRandomAcctCannotSetLeanTrackDelay(address random) public {
         vm.assume(random != address(timelock));
         vm.expectRevert("!Timelock");
 
         vm.prank(random);
-        timelock.setFastTrackDelay(0 days);
+        timelock.setLeanTrackDelay(0 days);
     }
 
     function testOnlySelfCanSetDelay(uint256 newDelay) public {
@@ -96,27 +95,27 @@ contract DualTimelockTest is ExtendedTest {
         assertEq(timelock.delay(), newDelay);
     }
 
-    function testOnlySelfCanSetFastTrackDelay(uint256 newDelay) public {
+    function testOnlySelfCanSetLeanTrackDelay(uint256 newDelay) public {
         vm.assume(newDelay >= 0 && newDelay < MINIMUM_DELAY);
         //setup
         //setup for event checks
         vm.expectEmit(false, false, false, false);
-        emit NewFastTrackDelay(newDelay);
+        emit NewLeanTrackDelay(newDelay);
         // execute
         vm.prank(address(timelock));
-        timelock.setFastTrackDelay(newDelay);
+        timelock.setLeanTrackDelay(newDelay);
         // asserts
-        assertEq(timelock.fastTrackDelay(), newDelay);
+        assertEq(timelock.leanTrackDelay(), newDelay);
     }
 
-    function testSetFastTrackDelayCannotBeGreaterThanDelay(uint256 newDelay) public {
+    function testSetLeanTrackDelayCannotBeGreaterThanDelay(uint256 newDelay) public {
         uint currentDelay = timelock.delay();
         vm.assume(newDelay > currentDelay);
         //setup
-        vm.expectRevert("!fastTrackDelay < delay");
+        vm.expectRevert("!leanTrackDelay < delay");
         // execute
         vm.prank(address(timelock));
-        timelock.setFastTrackDelay(newDelay);
+        timelock.setLeanTrackDelay(newDelay);
     }
     
 
@@ -149,13 +148,13 @@ contract DualTimelockTest is ExtendedTest {
         timelock.setPendingAdmin(random);
     }
 
-    function testRandomAcctCannotSetNewFastTrack(address random) public {
+    function testRandomAcctCannotSetNewLeanTrack(address random) public {
         vm.assume(random != address(timelock));
         // setup
         vm.expectRevert(bytes("!Timelock"));
         // execute
         vm.prank(random);
-        timelock.setPendingFastTrack(random);
+        timelock.setPendingLeanTrack(random);
     }
 
     function testRandomAcctCannotTakeOverAdmin(address random) public {
@@ -167,13 +166,13 @@ contract DualTimelockTest is ExtendedTest {
         timelock.acceptAdmin();
     }
 
-    function testRandomAcctCannotTakeOverFastTrack(address random) public {
-        vm.assume(random != fastTrack && random != address(0));
+    function testRandomAcctCannotTakeOverLeanTrack(address random) public {
+        vm.assume(random != leanTrack && random != address(0));
         // setup
-        vm.expectRevert(bytes("!pendingFastTrack"));
+        vm.expectRevert(bytes("!pendingLeanTrack"));
         // execute
         vm.prank(random);
-        timelock.acceptFastTrack();
+        timelock.acceptLeanTrack();
     }
 
     function testOnlyPendingAdminCanAcceptAdmin() public {
@@ -196,24 +195,24 @@ contract DualTimelockTest is ExtendedTest {
         assertEq(timelock.pendingAdmin(), address(0));
     } 
 
-    function testOnlyPendingFastTrackCanCallAcceptFastTrack() public {
+    function testOnlyPendingLeanTrackCanCallAcceptLeanTrack() public {
         // setup
-        address futureFastTrack = address(0xBEEF);
+        address futureLeanTrack = address(0xBEEF);
         // setup pendingAdmin
         vm.prank(address(timelock));
-        timelock.setPendingFastTrack(futureFastTrack);
-        assertEq(timelock.pendingFastTrack(), futureFastTrack);
+        timelock.setPendingLeanTrack(futureLeanTrack);
+        assertEq(timelock.pendingLeanTrack(), futureLeanTrack);
         //setup for event checks
         vm.expectEmit(true, false, false, false);
-        emit NewFastTrack(futureFastTrack);
+        emit NewLeanTrack(futureLeanTrack);
 
         // execute
-        vm.prank(futureFastTrack);
-        timelock.acceptFastTrack();
+        vm.prank(futureLeanTrack);
+        timelock.acceptLeanTrack();
 
         // asserts
-        assertEq(timelock.fastTrack(), futureFastTrack);
-        assertEq(timelock.pendingFastTrack(), address(0));
+        assertEq(timelock.leanTrack(), futureLeanTrack);
+        assertEq(timelock.pendingLeanTrack(), address(0));
     } 
 
     function testRandomAcctCannotQueueTrx(address random) public {
@@ -227,13 +226,13 @@ contract DualTimelockTest is ExtendedTest {
     }
 
     function testRandomAcctCannotQueueFastTrx(address random) public {
-        vm.assume(random != fastTrack);
+        vm.assume(random != leanTrack);
         // setup
-        vm.expectRevert(bytes("!fastTrack"));
+        vm.expectRevert(bytes("!leanTrack"));
 
         // execute
         vm.prank(random);
-        timelock.queueFastTransaction(address(timelock), 0, "", "", block.timestamp + 10 days);
+        timelock.queueRapidTransaction(address(timelock), 0, "", "", block.timestamp + 10 days);
     }
 
     function testQueueTrxEtaCannotBeInvalid() public {
@@ -254,8 +253,8 @@ contract DualTimelockTest is ExtendedTest {
         uint256 badEta = block.timestamp;
 
         // execute
-        vm.prank(address(fastTrack));
-        timelock.queueFastTransaction(address(grantee), 0, "", "", badEta);
+        vm.prank(address(leanTrack));
+        timelock.queueRapidTransaction(address(grantee), 0, "", "", badEta);
     }
 
     function testShouldQueueTrx() public {
@@ -305,17 +304,17 @@ contract DualTimelockTest is ExtendedTest {
         );
         //setup for event checks
         vm.expectEmit(true, true, false, false);
-        emit QueueFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+        emit QueueRapidTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
         // asserts
         assertEq(expectedTrxHash, trxHash);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
     }
 
-    function testFastTrackCannotTargetTimelock() public {
+    function testLeanTrackCannotTargetTimelock() public {
         // setup
         uint256 eta = block.timestamp + 1 days;
         // cannot call timelock
@@ -333,11 +332,61 @@ contract DualTimelockTest is ExtendedTest {
             eta
         );
         //setup for expect revert
-        vm.expectRevert(bytes("!self"));
+        vm.expectRevert(bytes("!target"));
 
         // execute
-        vm.prank(address(fastTrack));
-        timelock.queueFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+    }
+
+    function testLeanTrackCannotTargetTimelockAdmin() public {
+        // setup
+        uint256 eta = block.timestamp + 1 days;
+        // cannot call timelock
+        address target = address(admin);
+        bytes memory callData = abi.encodeWithSelector(DualTimelock.setDelay.selector, 5 days);
+        uint256 amount = 0;
+        string memory signature = "";
+        bytes32 expectedTrxHash;
+        Transaction memory testTrx;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        //setup for expect revert
+        vm.expectRevert(bytes("!target"));
+
+        // execute
+        vm.prank(address(leanTrack));
+        timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+    }
+
+    function testLeanTrackCannotTargetLeanTrack() public {
+        // setup
+        uint256 eta = block.timestamp + 1 days;
+        // cannot call timelock
+        address target = address(leanTrack);
+        bytes memory callData = abi.encodeWithSelector(DualTimelock.setDelay.selector, 5 days);
+        uint256 amount = 0;
+        string memory signature = "";
+        bytes32 expectedTrxHash;
+        Transaction memory testTrx;
+        (testTrx, expectedTrxHash) =_getTransactionAndHash(
+            target,
+            amount,
+            signature,
+            callData,
+            eta
+        );
+        //setup for expect revert
+        vm.expectRevert(bytes("!target"));
+
+        // execute
+        vm.prank(address(leanTrack));
+        timelock.queueRapidTransaction(target, amount, signature, callData, eta);
     }
 
     function testRandomAcctCannotCancelQueueTrx(address random) public {
@@ -351,13 +400,13 @@ contract DualTimelockTest is ExtendedTest {
     }
 
     function testRandomAcctCannotCancelFastQueueTrx(address random) public {
-        vm.assume(random != fastTrack);
+        vm.assume(random != leanTrack);
         // setup
-        vm.expectRevert(bytes("!fastTrack"));
+        vm.expectRevert(bytes("!leanTrack"));
 
         // execute
         vm.prank(address(0xABCD));
-        timelock.cancelFastTransaction(address(token), 0, "", "", block.timestamp + 1 days);
+        timelock.cancelRapidTransaction(address(token), 0, "", "", block.timestamp + 1 days);
      }
 
      function testShouldCancelQueuedTrx() public {
@@ -411,20 +460,20 @@ contract DualTimelockTest is ExtendedTest {
             eta
         );
 
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
 
         //setup for event checks
         vm.expectEmit(true, true, false, false);
-        emit CancelFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+        emit CancelRapidTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(fastTrack));
-        timelock.cancelFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        timelock.cancelRapidTransaction(target, amount, signature, callData, eta);
 
         // asserts
-        assertFalse(timelock.queuedFastTransactions(trxHash));
+        assertFalse(timelock.queuedRapidTransactions(trxHash));
     }
 
     function testRandomAcctCannotExecQueuedTrx(address random) public {
@@ -457,7 +506,7 @@ contract DualTimelockTest is ExtendedTest {
     }
 
     function testRandomAcctCannotExecQueuedFastTrx(address random) public {
-        vm.assume(random != fastTrack);
+        vm.assume(random != leanTrack);
         // setup
         uint256 eta = block.timestamp + 1 days;
         address target = address(token);
@@ -474,14 +523,14 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
 
-        vm.expectRevert(bytes("!fastTrack"));
+        vm.expectRevert(bytes("!leanTrack"));
         // execute
         vm.prank(random);
-        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+        timelock.executeRapidTransaction(target, amount, signature, callData, eta);
     } 
 
     function testCannotExecNonExistingTrx() public {
@@ -540,9 +589,9 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
 
         Transaction memory wrongTrx;
         bytes32 wrongTrxHash;
@@ -556,8 +605,8 @@ contract DualTimelockTest is ExtendedTest {
 
         vm.expectRevert(bytes("!queued_trx"));
         // execute
-        vm.prank(address(fastTrack));
-        timelock.executeFastTransaction(target, amount, signature, "", eta);
+        vm.prank(address(leanTrack));
+        timelock.executeRapidTransaction(target, amount, signature, "", eta);
     }
 
     function testCannotExecQueuedTrxBeforeETA() public {
@@ -606,15 +655,15 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
 
         skip(12 hours); // short of ETA
         vm.expectRevert(bytes("!eta"));
         // execute
-        vm.prank(address(fastTrack));
-        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        timelock.executeRapidTransaction(target, amount, signature, callData, eta);
     }
 
     function testCannotExecQueuedTrxAfterGracePeriod(uint256 executionTime) public {
@@ -666,14 +715,14 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
         skip(executionTime); // skip to time of execution passed gracePeriod
         vm.expectRevert(bytes("!staled_trx"));
         // execute
-        vm.prank(address(fastTrack));
-        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        timelock.executeRapidTransaction(target, amount, signature, callData, eta);
     }
 
         function testCannotExecFastTrxInIncorrectQueue() public {
@@ -700,8 +749,8 @@ contract DualTimelockTest is ExtendedTest {
         
         vm.expectRevert(bytes("!queued_trx"));
         // execute
-        vm.prank(address(fastTrack));
-        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        timelock.executeRapidTransaction(target, amount, signature, callData, eta);
     }
 
 
@@ -757,17 +806,17 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
         skip(eta + 1); // 1 pass eta
          //setup for event checks
         vm.expectEmit(true, true, false, false);
-        emit ExecuteFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+        emit ExecuteRapidTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(fastTrack));
-        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        timelock.executeRapidTransaction(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(token.balanceOf(grantee), 1000);
@@ -825,17 +874,17 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
         skip(eta + 1); // 1 pass eta
          //setup for event checks
         vm.expectEmit(true, true, false, false);
-        emit ExecuteFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+        emit ExecuteRapidTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        vm.prank(address(fastTrack));
-        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+        vm.prank(address(leanTrack));
+        timelock.executeRapidTransaction(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(token.balanceOf(grantee), 1000);
@@ -896,19 +945,19 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
         skip(eta + 1); // 1 pass 
         deal(address(timelock), 11 ether);
 
          //setup for event checks
         vm.expectEmit(true, true, false, false);
-        emit ExecuteFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+        emit ExecuteRapidTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        hoax(address(fastTrack), 1 ether);
-        timelock.executeFastTransaction(target, amount, signature, callData, eta);
+        hoax(address(leanTrack), 1 ether);
+        timelock.executeRapidTransaction(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(grantee.balance, amount);
@@ -968,19 +1017,19 @@ contract DualTimelockTest is ExtendedTest {
             callData,
             eta
         );
-        vm.prank(address(fastTrack));
-        bytes32 trxHash = timelock.queueFastTransaction(target, amount, signature, callData, eta);
-        assertTrue(timelock.queuedFastTransactions(trxHash));
+        vm.prank(address(leanTrack));
+        bytes32 trxHash = timelock.queueRapidTransaction(target, amount, signature, callData, eta);
+        assertTrue(timelock.queuedRapidTransactions(trxHash));
         skip(eta + 1); // 1 pass
         assertEq(address(timelock).balance, 0);
       
         //setup for event checks
         vm.expectEmit(true, true, false, false);
-        emit ExecuteFastTransaction(expectedTrxHash, target, amount, signature, callData, eta);
+        emit ExecuteRapidTransaction(expectedTrxHash, target, amount, signature, callData, eta);
 
         // execute
-        hoax(address(fastTrack), 10 ether);
-        timelock.executeFastTransaction{value: amount}(target, amount, signature, callData, eta);
+        hoax(address(leanTrack), 10 ether);
+        timelock.executeRapidTransaction{value: amount}(target, amount, signature, callData, eta);
 
         // asserts
         assertEq(grantee.balance, amount);
