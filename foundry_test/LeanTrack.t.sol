@@ -19,11 +19,15 @@ contract LeanTrackTest is ExtendedTest {
     DualTimelock private timelock;
     ERC20 private token;
     LeanTrack private leanTrack;
+    GovToken private govToken;
 
     uint256 public delay = 2 days;
     uint256 public leanTrackDelay = 1 days;
     uint256 public factoryMotionDuration = 1 days;
-    uint256 public constant QUORUM = 2000;
+    uint256 public constant HUNDRED_PCT = 10000;
+    uint256 public constant TOKEN_SUPPLY =  30000 * 10**uint256(18);
+    uint256 public constant QUORUM = 2000; // 20%
+    uint256 public constant QUORUM_AMOUNT = TOKEN_SUPPLY * QUORUM / HUNDRED_PCT;
     uint256 public constant transferAmount = 1e18;
     uint256 public constant MAX_OPERATIONS = 10;
     uint256 public constant MIN_OBJECTIONS_THRESHOLD = 100; // 1%
@@ -66,6 +70,18 @@ contract LeanTrackTest is ExtendedTest {
         uint256 eta
     );
 
+    event MotionObjected(
+        uint256 indexed motionId,
+        address indexed objector,
+        uint256 objectorsBalance,
+        uint256 newObjectionsAmount,
+        uint256 newObjectionsAmountPct
+    );
+
+    event MotionRejected(
+        uint256 indexed motionId
+    );
+
     event MotionFactoryAdded(
         address indexed factory,
         uint256 objectionsThreshold,
@@ -94,7 +110,8 @@ contract LeanTrackTest is ExtendedTest {
 
     function setUp() public {
          // deploy token
-        token = ERC20(new GovToken(18));
+        govToken = new GovToken(18);
+        token = ERC20(govToken);
         console.log("address for GovToken: ", address(token));
         
         bytes memory args = abi.encode(admin, address(0), delay, leanTrackDelay);
@@ -665,10 +682,6 @@ contract LeanTrackTest is ExtendedTest {
         motion = leanTrack.motions(motionId);
         assertEq(motion.isQueued, true);
         assertEq(motion.eta, motion.timeForQueue + leanTrackDelay);
-        console.log("motion.eta", motion.eta);
-        console.log("motion.timeForQueue", motion.timeForQueue);
-        console.log("leanTrackDelay", leanTrackDelay);
-        console.log("block.timestamp", block.timestamp);
         // check trx hashes where correctly queued
         for (uint i = 0; i < trxHashes.length; i++) {
             assertEq(trxHashes[i], queuedTrxHashes[i]);
@@ -836,6 +849,206 @@ contract LeanTrackTest is ExtendedTest {
         assertEq(motion.id, 0);
         // check transaction was executed
         assertEq(token.balanceOf(grantee), expectedAmount);
+    }
+
+    function testCannotObjectToMotionThatDoesntExist(uint256 operations, address random, uint256 unexistingMotiondId) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations); // motion 1
+        vm.assume(unexistingMotiondId != motionId);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        //execute
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+
+        vm.expectRevert(bytes("!motion_exists"));
+        hoax(objectoor); 
+        leanTrack.objectToMotion(unexistingMotiondId); // doesnt exist
+    }
+
+    function testCannotObjectToQueuedMotion(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue); //skip to eta
+
+        //execute
+        hoax(random);
+        leanTrack.queueMotion(motionId);
+
+        vm.expectRevert(bytes("!motion_queued"));
+        hoax(objectoor); 
+        leanTrack.objectToMotion(motionId); // already queued   
+    }
+
+    function testCannotObjectToMotionAfterTimeForQueuePasses(uint256 operations, address random) public {
+        vm.assume(operations > 0 && operations <= MAX_OPERATIONS);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(operations);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.warp(motion.timeForQueue + 1); //skip to eta without queueing the motion
+
+        vm.expectRevert(bytes("!timeForQueue"));
+        hoax(objectoor); 
+        leanTrack.objectToMotion(motionId); // timeForQueue has passed  
+    }
+
+    function testShouldObjectToMotionWithVotingPowerLessThanThreshold(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance > 0 && votingBalance < QUORUM_AMOUNT);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(motion.objectionsThreshold, QUORUM);
+        deal(address(token), random, votingBalance);
+        uint256 votingBalanceForObjector = token.balanceOf(random);
+        uint256 votingBalanceForObjectorPct = (votingBalanceForObjector * HUNDRED_PCT) / TOKEN_SUPPLY;
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionObjected(motionId, random, votingBalanceForObjector, votingBalanceForObjector, votingBalanceForObjectorPct);
+
+        //execute
+        hoax(random);
+        leanTrack.objectToMotion(motionId);
+
+        //assert motion has correct amount of objections
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, votingBalanceForObjector);
+    }
+
+    function testShouldUseLowerVotingBalanceForObjection(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance > 0 && votingBalance < QUORUM_AMOUNT);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(motion.objectionsThreshold, QUORUM);
+        // setup voting power
+        govToken._setUseBalanceOfForVotingPower(false);
+        // has lower balance at the time of the motion snapshot block
+        govToken._setVotingPower(random, motion.snapshotBlock, votingBalance);
+        uint256 votingBalanceForObjector = govToken.getPriorVotes(random, motion.snapshotBlock);
+        uint256 votingBalanceForObjectorPct = (votingBalanceForObjector * HUNDRED_PCT) / TOKEN_SUPPLY;
+
+        // skip block numbers
+        vm.roll(block.number + 2);
+        // give objector more voting power than Quorum at current block number
+        govToken._setVotingPower(random, block.number, QUORUM_AMOUNT + 1);
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionObjected(motionId, random, votingBalanceForObjector, votingBalanceForObjector, votingBalanceForObjectorPct);
+
+        //execute
+        hoax(random);
+        leanTrack.objectToMotion(motionId);
+
+        //assert motion has correct amount of objections
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        // should use lower voting balance
+        assertEq(motion.objections, votingBalanceForObjector);
+    }
+
+    function testCannotObjectTwiceToSameMotion(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance > 0 && votingBalance < QUORUM_AMOUNT);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(motion.objectionsThreshold, QUORUM);
+        deal(address(token), random, votingBalance);
+        uint256 votingBalanceForObjector = token.balanceOf(random);
+        uint256 votingBalanceForObjectorPct = (votingBalanceForObjector * HUNDRED_PCT) / TOKEN_SUPPLY;
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionObjected(motionId, random, votingBalanceForObjector, votingBalanceForObjector, votingBalanceForObjectorPct);
+
+        //execute
+        hoax(random);
+        leanTrack.objectToMotion(motionId);
+
+        //assert motion has correct amount of objections
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, votingBalanceForObjector);
+
+        vm.expectRevert(bytes("!already_objected"));
+        hoax(random);
+        leanTrack.objectToMotion(motionId); // already objected
+    }
+
+    function testCannotObjectToMotionWithZeroVotingBalance(address random) public {
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(motion.objectionsThreshold, QUORUM);
+
+        vm.expectRevert(bytes("!voting_balance"));
+        hoax(random);
+        leanTrack.objectToMotion(motionId); // zero voting balance
+    }
+
+    function testShouldRejectMotionIfObjectionsReachedAboveThreshold(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance >= QUORUM_AMOUNT && votingBalance < TOKEN_SUPPLY);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(motion.objectionsThreshold, QUORUM);
+        deal(address(token), random, votingBalance);
+        uint256 votingBalanceForObjector = token.balanceOf(random);
+        uint256 votingBalanceForObjectorPct = (votingBalanceForObjector * HUNDRED_PCT) / TOKEN_SUPPLY;
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionObjected(motionId, random, votingBalanceForObjector, votingBalanceForObjector, votingBalanceForObjectorPct);
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionRejected(motionId);
+
+        //execute
+        hoax(random); // has more than quorum
+        leanTrack.objectToMotion(motionId); // should reject motion
+
+        //assert motion has been deleted
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, 0);
     }
 
 

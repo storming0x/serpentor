@@ -49,5 +49,6 @@ interface LeanTrack {
     function createMotion(address[] memory targets, uint256[] memory values, string[] memory signatures, bytes[] memory calldatas) external returns (uint256);
     function queueMotion(uint256 motionId) external returns (bytes32[] memory);
     function enactMotion(uint256 motionId) external;
+    function objectToMotion(uint256 motionId) external;
     
 }

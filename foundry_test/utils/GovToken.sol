@@ -45,5 +45,10 @@ contract GovToken is ERC20 {
         return votingPower[account][blockNumber];
     }
 
+    function totalSupplyAt(uint blockNumber) external view returns (uint256) {
+        blockNumber; // silence warning
+        return totalSupply();
+    }
+
 
 }

@@ -24,7 +24,7 @@ MIN_OBJECTIONS_THRESHOLD: constant(uint256) = 100
 # @dev represented in basis points (30% = 3000)
 MAX_OBJECTIONS_THRESHOLD: constant(uint256) = 3000
 MIN_MOTION_DURATION: constant(uint256) = 57600 # 16 hours
-
+HUNDRED_PERCENT: constant(uint256) = 10000 # 100%
 
 ### interfaces
 
@@ -37,6 +37,11 @@ interface DualTimelock:
     def queueRapidTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> bytes32: nonpayable
     def cancelRapidTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256): nonpayable
     def executeRapidTransaction(target: address, amount: uint256, signature: String[METHOD_SIG_SIZE], data: Bytes[CALL_DATA_LEN], eta: uint256) -> Bytes[MAX_DATA_LEN]: payable
+
+# @dev Comp compatible interface to get Voting weight of account at block number. Some tokens implement 'balanceOfAt' but this call can be adapted to integrate with 'balanceOfAt'
+interface GovToken:
+    def getPriorVotes(account: address, blockNumber: uint256) -> uint256:view
+    def totalSupplyAt(blockNumber: uint256) -> uint256: view
 
 ### structs
 
@@ -120,6 +125,15 @@ event MotionQueued:
 event MotionEnacted:
     motionId: indexed(uint256)
 
+event MotionObjected:
+    motionId: indexed(uint256)
+    objector: indexed(address)
+    objectorBalance: uint256
+    newObjectionsAmount: uint256
+    newObjectionsAmountPct: uint256
+
+event MotionRejected:
+    motionId: indexed(uint256)
 
 ### state fields
 # @notice The address of the admin
@@ -138,6 +152,8 @@ timelock: public(address)
 lastMotionId: public(uint256)
 # @notice motions Id => Motion
 motions: public(HashMap[uint256, Motion])
+# @notice stores if motion with given id has been object from given address
+objections: public(HashMap[uint256, HashMap[address, bool]])
 # @notice factories addresses => Factory
 factories: public(HashMap[address, Factory])
 # @notice allowed executors for queued motions
@@ -230,7 +246,7 @@ def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
     """
     @notice
         Send motion transactions to be queued in the timelock.
-        Queue will fail if operation arguments are repeated.
+        Queue will fail if operation arguments are repeated or already in timelock queue.
     @param motionId: The id of the motion
     """
     assert not self.paused, "!paused"
@@ -299,6 +315,41 @@ def enactMotion(motionId: uint256):
 
     log MotionEnacted(motionId)
 
+@external
+def objectToMotion(motionId: uint256):
+    """
+    @notice
+        Submits an objection to a motion from a "governanceToken" holder with voting power.
+    @dev
+        The motion must exist.
+        The motion must be in the "pending" state.
+        The sender must not have already objected.
+        The sender must have voting power.
+    @param motionId: The id of the motion
+    """
+    motion: Motion = self.motions[motionId]
+    assert motion.id != 0, "!motion_exists"
+    assert motion.isQueued == False, "!motion_queued"
+    assert motion.timeForQueue > block.timestamp, "!timeForQueue"
+    assert not self.objections[motionId][msg.sender], "!already_objected"
+    # check voting balance at motion snapshot block and compare to current block number and use the lower one
+    votingBalance: uint256 = min(
+        GovToken(self.token).getPriorVotes(msg.sender, motion.snapshotBlock),
+        GovToken(self.token).getPriorVotes(msg.sender, block.number)
+    )
+    assert votingBalance > 0, "!voting_balance"
+    totalSupply: uint256 = GovToken(self.token).totalSupplyAt(motion.snapshotBlock)
+    newObjectionsAmount: uint256 = motion.objections + votingBalance
+    newObjectionsAmountPct: uint256 = (newObjectionsAmount * HUNDRED_PERCENT) / totalSupply
+    log MotionObjected(motionId, msg.sender, votingBalance, newObjectionsAmount, newObjectionsAmountPct)
+
+    # update motion objections or delete motion if objections threshold is reached
+    if newObjectionsAmountPct >= motion.objectionsThreshold:
+        self.motions[motionId] = empty(Motion)
+        log MotionRejected(motionId)
+    else:
+        self.motions[motionId].objections = newObjectionsAmount
+        self.objections[motionId][msg.sender] = True
 
 @external
 def addMotionFactory(
@@ -417,3 +468,33 @@ def unpause():
     self.paused = False
 
     log Unpaused(msg.sender)
+
+
+@external
+@view
+def canObjectToMotion(motionId: uint256, objector: address) -> bool:
+    """
+    @notice
+        Check if a "governanceToken" holder with voting power can object to a motion.
+    @param motionId: The id of the motion
+    @param objector: The address of the objector
+    @return bool: True if the objector can object to the motion
+    """
+    motion: Motion = self.motions[motionId]
+    if motion.id == 0:
+        return False
+    if motion.isQueued: # motion is queued
+        return False    
+    if motion.timeForQueue <= block.timestamp: # motion is expired
+        return False
+    if self.objections[motionId][objector]: # objector already objected
+        return False
+    # check voting balance at motion snapshot block and compare to current block number and use the lower one
+    votingBalance: uint256 = min(
+        GovToken(self.token).getPriorVotes(objector, motion.snapshotBlock),
+        GovToken(self.token).getPriorVotes(objector, block.number)
+    )
+    if votingBalance == 0: # objector has no voting balance
+        return False
+
+    return True
