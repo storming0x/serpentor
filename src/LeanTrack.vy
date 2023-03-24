@@ -135,6 +135,9 @@ event MotionObjected:
 event MotionRejected:
     motionId: indexed(uint256)
 
+event MotionCanceled:
+    motionId: indexed(uint256)
+
 ### state fields
 # @notice The address of the admin
 admin: public(address)
@@ -350,6 +353,41 @@ def objectToMotion(motionId: uint256):
     else:
         self.motions[motionId].objections = newObjectionsAmount
         self.objections[motionId][msg.sender] = True
+
+@external
+def cancelMotion(motionId: uint256):
+    """
+    @notice
+        Cancels a motion.
+    @dev
+        The motion must exist.
+        The motion must be in the "pending" state.
+        The sender must be the proposer of the motion or the guardian role.
+    @param motionId: The id of the motion
+    """
+    motion: Motion = self.motions[motionId]
+    assert motion.id != 0, "!motion_exists"
+    # only guardian or proposer can cancel motion
+    assert msg.sender == self.knight or msg.sender == motion.proposer, "!access"
+   
+    # if motion is queued, cancel it in timelock
+    if motion.isQueued:
+        numOperations: uint256 = len(motion.targets)
+        for i in range(MAX_POSSIBLE_OPERATIONS):
+            if i >= numOperations:
+                break
+            DualTimelock(self.timelock).cancelRapidTransaction(
+                motion.targets[i],
+                motion.values[i],
+                motion.signatures[i],
+                motion.calldatas[i],
+                motion.eta
+            )
+
+    # delete motion
+    self.motions[motionId] = empty(Motion)
+
+    log MotionCanceled(motionId)
 
 @external
 def addMotionFactory(

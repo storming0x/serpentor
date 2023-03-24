@@ -82,6 +82,10 @@ contract LeanTrackTest is ExtendedTest {
         uint256 indexed motionId
     );
 
+    event MotionCanceled(
+        uint256 indexed motionId
+    );
+
     event MotionFactoryAdded(
         address indexed factory,
         uint256 objectionsThreshold,
@@ -1049,6 +1053,254 @@ contract LeanTrackTest is ExtendedTest {
         //assert motion has been deleted
         motion = leanTrack.motions(motionId);
         assertEq(motion.id, 0);
+    }
+
+    function testRandomAcctCannotCanCancelMotion(address random) public {
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+
+        vm.expectRevert(bytes("!access"));
+        hoax(random);
+        leanTrack.cancelMotion(motionId);
+    }
+
+    function testCannotCancelUnexistingMotion(address random) public {
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.proposer, factory);
+
+        vm.expectRevert(bytes("!motion_exists"));
+        hoax(factory);
+        leanTrack.cancelMotion(motionId + 1);
+    }
+
+    function testProposerCanCancelMotionBeforeQueued(address random) public {
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.proposer, factory);
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionCanceled(motionId);
+
+        //execute
+        hoax(factory);
+        leanTrack.cancelMotion(motionId);
+
+        //assert motion has been deleted
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, 0);
+    }
+
+    function testKnightCanCancelMotionBeforeQueued(address random) public {
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.proposer, factory);
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionCanceled(motionId);
+
+        //execute
+        hoax(knight);
+        leanTrack.cancelMotion(motionId);
+
+        //assert motion has been deleted
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, 0);
+    }
+
+    function testProposerCanCancelMotionAfterBeingQueued() public {
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.proposer, factory);
+
+        // skip to timeForQueue
+        vm.warp(motion.timeForQueue);
+
+        hoax(factory);
+        bytes32[] memory queuedTrxHashes = leanTrack.queueMotion(motionId);
+
+        //assert trxHashes are queued in timelock
+        for (uint256 i = 0; i < queuedTrxHashes.length; i++) {
+            assertTrue(timelock.queuedRapidTransactions(queuedTrxHashes[i]));
+        }
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionCanceled(motionId);
+
+        //execute
+        hoax(factory);
+        leanTrack.cancelMotion(motionId);
+
+        //assert motion has been deleted
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, 0);
+
+         //assert trxHashes are no longer queued in timelock
+        for (uint256 i = 0; i < queuedTrxHashes.length; i++) {
+            assertFalse(timelock.queuedRapidTransactions(queuedTrxHashes[i]));
+        }
+    }
+
+    function testKnightCanCancelMotionAfterBeingQueued() public {
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.proposer, factory);
+
+        // skip to timeForQueue
+        vm.warp(motion.timeForQueue);
+
+        hoax(factory);
+        bytes32[] memory queuedTrxHashes = leanTrack.queueMotion(motionId);
+
+        //assert trxHashes are queued in timelock
+        for (uint256 i = 0; i < queuedTrxHashes.length; i++) {
+            assertTrue(timelock.queuedRapidTransactions(queuedTrxHashes[i]));
+        }
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionCanceled(motionId);
+
+        //execute
+        hoax(knight);
+        leanTrack.cancelMotion(motionId);
+
+        //assert motion has been deleted
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, 0);
+
+         //assert trxHashes are no longer queued in timelock
+        for (uint256 i = 0; i < queuedTrxHashes.length; i++) {
+            assertFalse(timelock.queuedRapidTransactions(queuedTrxHashes[i]));
+        }
+    }
+
+    function testCanObjectToMotionReturnsTrue(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance >= QUORUM_AMOUNT && votingBalance < TOKEN_SUPPLY);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(motion.objectionsThreshold, QUORUM);
+        deal(address(token), random, votingBalance);
+
+        assertTrue(leanTrack.canObjectToMotion(motionId, random));
+    }
+
+    function testCanObjectToMotionReturnsFalseIfMotionDoesntExist(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance > 0 && votingBalance < QUORUM_AMOUNT);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+
+        assertFalse(leanTrack.canObjectToMotion(motionId + 1, random));
+    }
+
+    function testCanObjectToMotionReturnsFalseIfMotionIsQueued(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance > 0 && votingBalance < QUORUM_AMOUNT);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        deal(address(token), random, votingBalance);
+
+        // skip to time when motion is queued
+        vm.warp(motion.timeForQueue);
+
+        //execute
+        leanTrack.queueMotion(motionId);
+
+        assertFalse(leanTrack.canObjectToMotion(motionId, random));
+    }
+
+    function testCanObjectToMotionReturnsFalseIfMotionTimeForQueueHasPassed(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance > 0 && votingBalance < QUORUM_AMOUNT);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        deal(address(token), random, votingBalance);
+
+        // skip to time when motion is queued
+        vm.warp(motion.timeForQueue + 1);
+
+        assertFalse(leanTrack.canObjectToMotion(motionId, random));
+    }
+
+    function testCanObjectToMotionReturnsFalseIfObjectorAlreadyObjected(address random, uint256 votingBalance) public {
+        vm.assume(votingBalance > 0 && votingBalance < QUORUM_AMOUNT);
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(motion.objectionsThreshold, QUORUM);
+        deal(address(token), random, votingBalance);
+        uint256 votingBalanceForObjector = token.balanceOf(random);
+        uint256 votingBalanceForObjectorPct = (votingBalanceForObjector * HUNDRED_PCT) / TOKEN_SUPPLY;
+
+        // check for event
+        vm.expectEmit(false, false, false, false);
+        emit MotionObjected(motionId, random, votingBalanceForObjector, votingBalanceForObjector, votingBalanceForObjectorPct);
+
+        //execute
+        hoax(random); // has more than quorum
+        leanTrack.objectToMotion(motionId); // should reject motion
+
+        //assert motion objections were counted
+        motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, votingBalanceForObjector);
+
+        assertFalse(leanTrack.canObjectToMotion(motionId, random));
+    }
+
+    function testCanObjectToMotionReturnsFalseIfVotingBalanceIsZero(address random) public {
+        vm.assume(!reserved[random]);
+        // setup
+        uint256 motionId;
+        (motionId,) = _createMotion(1);
+        Motion memory motion = leanTrack.motions(motionId);
+        assertEq(motion.id, motionId);
+        assertEq(motion.objections, 0);
+        assertEq(token.balanceOf(random), 0);
+
+        assertFalse(leanTrack.canObjectToMotion(motionId, random));
     }
 
 

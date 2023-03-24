@@ -35,6 +35,7 @@ interface LeanTrack {
     function timelock() external view returns (address);
     function paused() external view returns (bool);
     function knight() external view returns (address);
+    function canObjectToMotion(uint256 motionId, address objector) external view returns (bool);
 
     // non-view functions
     function acceptTimelockAccess() external;
@@ -49,6 +50,6 @@ interface LeanTrack {
     function createMotion(address[] memory targets, uint256[] memory values, string[] memory signatures, bytes[] memory calldatas) external returns (uint256);
     function queueMotion(uint256 motionId) external returns (bytes32[] memory);
     function enactMotion(uint256 motionId) external;
-    function objectToMotion(uint256 motionId) external;
-    
+    function cancelMotion(uint256 motionId) external;
+    function objectToMotion(uint256 motionId) external; 
 }
