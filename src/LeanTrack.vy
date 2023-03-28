@@ -206,7 +206,6 @@ def createMotion(
     assert len(targets) == len(values) and len(targets) == len(signatures) and len(targets) == len(calldatas), "!len_mismatch"
     assert self.factories[msg.sender].isFactory, "!factory"
 
-    # TODO: add motions limit check
     self.lastMotionId += 1
     motionId: uint256 = self.lastMotionId
 
