@@ -206,7 +206,6 @@ def createMotion(
     assert len(targets) == len(values) and len(targets) == len(signatures) and len(targets) == len(calldatas), "!len_mismatch"
     assert self.factories[msg.sender].isFactory, "!factory"
 
-    # TODO: add motions limit check
     self.lastMotionId += 1
     motionId: uint256 = self.lastMotionId
 
@@ -253,28 +252,31 @@ def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
     @param motionId: The id of the motion
     """
     assert not self.paused, "!paused"
-    motion: Motion = self.motions[motionId]
-    assert motion.id != 0, "!motion_exists"
-    assert motion.isQueued == False, "!motion_queued"
-    assert motion.timeForQueue <= block.timestamp, "!timeForQueue"
- 
+    assert self.motions[motionId].id != 0, "!motion_exists"
+    assert self.motions[motionId].isQueued == False, "!motion_queued"
+    assert self.motions[motionId].timeForQueue <= block.timestamp, "!timeForQueue"
+
     eta: uint256 = block.timestamp + DualTimelock(self.timelock).leanTrackDelay()
 
     trxHashes: DynArray[bytes32, MAX_POSSIBLE_OPERATIONS] = []
 
-    numOperations: uint256 = len(motion.targets)
-    
+    numOperations: uint256 = len(self.motions[motionId].targets)
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].targets
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].values
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].signatures
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].calldatas
+
     for i in range(MAX_POSSIBLE_OPERATIONS):
         if i >= numOperations:
             break
         # check hash doesnt exist already in timelock
-        localHash: bytes32 = keccak256(_abi_encode(motion.targets[i], motion.values[i], motion.signatures[i], motion.calldatas[i], eta))
+        localHash: bytes32 = keccak256(_abi_encode(targets[i], values[i], signatures[i], calldatas[i], eta))
         assert not DualTimelock(self.timelock).queuedRapidTransactions(localHash), "!trxHash_exists"
         trxHash: bytes32 = DualTimelock(self.timelock).queueRapidTransaction(
-            motion.targets[i],
-            motion.values[i],
-            motion.signatures[i],
-            motion.calldatas[i],
+            targets[i],
+            values[i],
+            signatures[i],
+            calldatas[i],
             eta
         )
 
@@ -282,7 +284,7 @@ def queueMotion(motionId: uint256)-> DynArray[bytes32, MAX_POSSIBLE_OPERATIONS]:
     # check motion as queued and set eta
     self.motions[motionId].isQueued = True
     self.motions[motionId].eta = eta
-    
+
     log MotionQueued(motionId, trxHashes, eta)
 
     return trxHashes
@@ -296,21 +298,26 @@ def enactMotion(motionId: uint256):
     """
     assert not self.paused, "!paused"
     assert self.executors[msg.sender], "!executor"
-    motion: Motion = self.motions[motionId]
-    assert motion.id != 0, "!motion_exists"
-    assert motion.isQueued == True, "!motion_queued"
-    assert motion.eta <= block.timestamp, "!eta"
+    assert self.motions[motionId].id != 0, "!motion_exists"
+    assert self.motions[motionId].isQueued == True, "!motion_queued"
+    assert self.motions[motionId].eta <= block.timestamp, "!eta"
 
-    numOperations: uint256 = len(motion.targets)
+    numOperations: uint256 = len(self.motions[motionId].targets)
+    targets: DynArray[address, MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].targets
+    values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].values
+    signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].signatures
+    calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].calldatas
+    eta: uint256 = self.motions[motionId].eta
+
     for i in range(MAX_POSSIBLE_OPERATIONS):
         if i >= numOperations:
             break
         DualTimelock(self.timelock).executeRapidTransaction(
-            motion.targets[i],
-            motion.values[i],
-            motion.signatures[i],
-            motion.calldatas[i],
-            motion.eta
+            targets[i],
+            values[i],
+            signatures[i],
+            calldatas[i],
+            eta
         )
 
     # delete motion
@@ -330,24 +337,24 @@ def objectToMotion(motionId: uint256):
         The sender must have voting power.
     @param motionId: The id of the motion
     """
-    motion: Motion = self.motions[motionId]
-    assert motion.id != 0, "!motion_exists"
-    assert motion.isQueued == False, "!motion_queued"
-    assert motion.timeForQueue > block.timestamp, "!timeForQueue"
+    assert self.motions[motionId].id != 0, "!motion_exists"
+    assert self.motions[motionId].isQueued == False, "!motion_queued"
+    assert self.motions[motionId].timeForQueue > block.timestamp, "!timeForQueue"
     assert not self.objections[motionId][msg.sender], "!already_objected"
     # check voting balance at motion snapshot block and compare to current block number and use the lower one
+    snapshotBlock: uint256 = self.motions[motionId].snapshotBlock
     votingBalance: uint256 = min(
-        GovToken(self.token).getPriorVotes(msg.sender, motion.snapshotBlock),
+        GovToken(self.token).getPriorVotes(msg.sender, snapshotBlock),
         GovToken(self.token).getPriorVotes(msg.sender, block.number)
     )
     assert votingBalance > 0, "!voting_balance"
-    totalSupply: uint256 = GovToken(self.token).totalSupplyAt(motion.snapshotBlock)
-    newObjectionsAmount: uint256 = motion.objections + votingBalance
+    totalSupply: uint256 = GovToken(self.token).totalSupplyAt(snapshotBlock)
+    newObjectionsAmount: uint256 = self.motions[motionId].objections + votingBalance
     newObjectionsAmountPct: uint256 = (newObjectionsAmount * HUNDRED_PERCENT) / totalSupply
     log MotionObjected(motionId, msg.sender, votingBalance, newObjectionsAmount, newObjectionsAmountPct)
 
     # update motion objections or delete motion if objections threshold is reached
-    if newObjectionsAmountPct >= motion.objectionsThreshold:
+    if newObjectionsAmountPct >= self.motions[motionId].objectionsThreshold:
         self.motions[motionId] = empty(Motion)
         log MotionRejected(motionId)
     else:
@@ -365,23 +372,28 @@ def cancelMotion(motionId: uint256):
         The sender must be the proposer of the motion or the guardian role.
     @param motionId: The id of the motion
     """
-    motion: Motion = self.motions[motionId]
-    assert motion.id != 0, "!motion_exists"
+    # motion: Motion = self.motions[motionId]
+    assert self.motions[motionId].id != 0, "!motion_exists"
     # only guardian or proposer can cancel motion
-    assert msg.sender == self.knight or msg.sender == motion.proposer, "!access"
+    assert msg.sender == self.knight or msg.sender == self.motions[motionId].proposer, "!access"
    
     # if motion is queued, cancel it in timelock
-    if motion.isQueued:
-        numOperations: uint256 = len(motion.targets)
+    if self.motions[motionId].isQueued:
+        numOperations: uint256 = len(self.motions[motionId].targets)
+        targets: DynArray[address, MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].targets
+        values: DynArray[uint256, MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].values
+        signatures: DynArray[String[METHOD_SIG_SIZE], MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].signatures
+        calldatas: DynArray[Bytes[CALL_DATA_LEN], MAX_POSSIBLE_OPERATIONS] = self.motions[motionId].calldatas
+        eta: uint256 = self.motions[motionId].eta
         for i in range(MAX_POSSIBLE_OPERATIONS):
             if i >= numOperations:
                 break
             DualTimelock(self.timelock).cancelRapidTransaction(
-                motion.targets[i],
-                motion.values[i],
-                motion.signatures[i],
-                motion.calldatas[i],
-                motion.eta
+                targets[i],
+                values[i],
+                signatures[i],
+                calldatas[i],
+                eta
             )
 
     # delete motion
@@ -518,18 +530,17 @@ def canObjectToMotion(motionId: uint256, objector: address) -> bool:
     @param objector: The address of the objector
     @return bool: True if the objector can object to the motion
     """
-    motion: Motion = self.motions[motionId]
-    if motion.id == 0:
+    if self.motions[motionId].id == 0:
         return False
-    if motion.isQueued: # motion is queued
+    if self.motions[motionId].isQueued: # motion is queued
         return False    
-    if motion.timeForQueue <= block.timestamp: # motion is expired
+    if self.motions[motionId].timeForQueue <= block.timestamp: # motion is expired
         return False
     if self.objections[motionId][objector]: # objector already objected
         return False
     # check voting balance at motion snapshot block and compare to current block number and use the lower one
     votingBalance: uint256 = min(
-        GovToken(self.token).getPriorVotes(objector, motion.snapshotBlock),
+        GovToken(self.token).getPriorVotes(objector, self.motions[motionId].snapshotBlock),
         GovToken(self.token).getPriorVotes(objector, block.number)
     )
     if votingBalance == 0: # objector has no voting balance
