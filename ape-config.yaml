@@ -5,7 +5,7 @@ plugins:
   - name: infura
   - name: tokens
 
-# require OpenZepplin Contracts
+# require OpenZeppelin Contracts
 dependencies:
   - name: openzeppelin
     github: OpenZeppelin/openzeppelin-contracts
