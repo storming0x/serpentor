@@ -271,7 +271,7 @@ def __init__(
     @param votingPeriod The initial voting period
     @param votingDelay The initial voting delay
     @param proposalThreshold The initial proposal threshold
-    @param quorumVotes The initial quorum voting setting
+    @param quorumVotes The initial quorum voting setting, recommended to be higher than proposalThreshold
     @param initialProposalId The initialProposalId to start the counter
     """
     assert timelockAddr != empty(address), "!timelock"
@@ -280,6 +280,7 @@ def __init__(
     assert votingPeriod >= MIN_VOTING_PERIOD and votingPeriod <= MAX_VOTING_PERIOD, "!votingPeriod"
     assert votingDelay >= MIN_VOTING_DELAY and votingDelay <= MAX_VOTING_DELAY, "!votingDelay"
     assert proposalThreshold >= MIN_PROPOSAL_THRESHOLD and proposalThreshold <= MAX_PROPOSAL_THRESHOLD, "!proposalThreshold"
+    assert quorumVotes > proposalThreshold, "!quorumVotes"
     self.admin = admin
     self.votingPeriod = votingPeriod
     self.votingDelay = votingDelay
