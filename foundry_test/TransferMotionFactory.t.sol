@@ -18,7 +18,7 @@ import {TransferMotionFactory} from "../src/factories/examples/TransferMotionFac
 import {MockLeanTrack, MotionArgs} from "./utils/MockLeanTrack.sol";
 
 // these tests covers both the example TransferMotionFactory and the BaseMotionFactory contracts
-contract BaseMotionFactoryTest is ExtendedTest {
+contract TransferMotionFactoryTest is ExtendedTest {
     uint256 public constant DEFAULT_LIMIT = 1000;
     VyperDeployer private vyperDeployer = new VyperDeployer();
     DualTimelock private timelock;
@@ -120,14 +120,36 @@ contract BaseMotionFactoryTest is ExtendedTest {
         transferfactory.createTransferMotion(address(token), grantee, 100);
     }
 
-    function testRandomCanotCallSetAuthorized() public {
-        vm.expectRevert();
+    function testCannotTransferPassedLimit() public {
+        vm.expectRevert("amount > limit");
 
-        // set authorized
-        hoax(objectoor);
-        transferfactory.setAuthorized(objectoor, true);
+        // create transfer motion
+        hoax(authorized);
+        transferfactory.createTransferMotion(address(token), grantee, DEFAULT_LIMIT + 1);
     }
 
+    function testCannotTransferUnidentifiedToken() public {
+        vm.expectRevert("amount > limit");
+
+        // create transfer motion for random token not in setup
+        hoax(authorized);
+        transferfactory.createTransferMotion(address(grantee), grantee, 100);
+    }
+
+    function testDisallowTokenTransfer() public {
+        // create transfer motion
+        hoax(authorized);
+        transferfactory.createTransferMotion(address(token), grantee, 100);
+
+        // disallow token transfer
+        hoax(admin);
+        transferfactory.disallowTokenTransfer(address(token));
+
+        // create transfer motion
+        vm.expectRevert("amount > limit");
+        hoax(authorized);
+        transferfactory.createTransferMotion(address(token), grantee, 100);
+    }
 
     function testCancelTransferMotion() public {
         // create transfer motion

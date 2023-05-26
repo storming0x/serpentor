@@ -32,7 +32,7 @@ contract LeanTrackTest is ExtendedTest {
     uint256 public constant MAX_OPERATIONS = 10;
     uint256 public constant MIN_OBJECTIONS_THRESHOLD = 100; // 1%
     uint256 public constant MAX_OBJECTIONS_THRESHOLD = 3000; // 30%
-    uint256 public constant MIN_MOTION_DURATION = 16 hours;
+    uint256 public constant MIN_MOTION_DURATION = 1; // 1 second
 
     address public admin = address(1);
     address public factory = address(2);

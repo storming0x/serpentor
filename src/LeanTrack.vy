@@ -23,7 +23,9 @@ MIN_OBJECTIONS_THRESHOLD: constant(uint256) = 100
 # @notice upper bound for objections threshold settings
 # @dev represented in basis points (30% = 3000)
 MAX_OBJECTIONS_THRESHOLD: constant(uint256) = 3000
-MIN_MOTION_DURATION: constant(uint256) = 57600 # 16 hours
+# @dev minimum time in seconds for queueing motion allows for 1 hour of objections
+# @dev left low for emergency situations, factories can set higher values for non emergency operations
+MIN_MOTION_DURATION: constant(uint256) = 1 # 1 second
 HUNDRED_PERCENT: constant(uint256) = 10000 # 100%
 
 ### interfaces

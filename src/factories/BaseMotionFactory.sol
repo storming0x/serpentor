@@ -34,14 +34,28 @@ abstract contract BaseMotionFactory {
         gov = _gov;
     }
 
+    /**
+     * @dev internal view function to check if the caller is the gov
+     */
     function _onlyGov() internal view {
         require(msg.sender == gov, "!gov");
     }
 
+    /**
+     * @dev internal view function to check if the caller is authorized
+     */
     function _onlyAuthorized() internal view {
         require(authorized[msg.sender], "!auth");
     }
-
+    
+    /**
+     * @dev internal function create a motion
+     * @param targets array of addresses of the contracts to call
+     * @param values array of values to send to each contract
+     * @param signatures array of function signatures to call
+     * @param calldatas array of calldata to send
+     * @return motionId id of the created motion
+     */
     function _createMotion(
         address[] memory targets, 
         uint256[] memory values, 
@@ -55,6 +69,15 @@ abstract contract BaseMotionFactory {
             calldatas
         );
     }
+
+    function cancelMotion(uint256 motionId) external virtual onlyAuthorized {
+                _cancelMotion(motionId);
+    }
+
+    // create an internal function for canceling a motion
+    function _cancelMotion(uint256 motionId) internal virtual {
+        LeanTrack(leanTrack).cancelMotion(motionId);
+    }  
 
     /**
      * @dev set authorized roles for this factory to execute restricted calls

@@ -3,7 +3,8 @@ pragma solidity ^0.8.16;
 
 import "../BaseMotionFactory.sol";
 
-// This contract is used for testing purposes only
+// This contract is used as an example implementation for testing purposes only
+// It is not meant to be used in production and lacks more security checks
 /**
  * @dev Example contract for creating motions that transfer tokens
  */
@@ -18,6 +19,10 @@ contract TransferMotionFactory is BaseMotionFactory {
     function setTransferLimit(address token, uint256 limit) external onlyGov {
         require(limit > 0, "> 0");
         transferLimits[token] = limit;
+    }
+
+    function disallowTokenTransfer(address token) external onlyGov {
+        transferLimits[token] = 0;
     }
 
     // function to create a motion that transfers tokens
