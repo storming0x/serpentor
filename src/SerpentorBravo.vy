@@ -271,7 +271,7 @@ def __init__(
     @param votingPeriod The initial voting period
     @param votingDelay The initial voting delay
     @param proposalThreshold The initial proposal threshold
-    @param quorumVotes The initial quorum voting setting, recommended to be higher than proposalThreshold
+    @param quorumVotes The initial quorum voting setting, recommended to be higher than proposalThreshold, should be higher than proposalThreshold
     @param initialProposalId The initialProposalId to start the counter
     """
     assert timelockAddr != empty(address), "!timelock"

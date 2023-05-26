@@ -32,7 +32,7 @@ contract LeanTrackTest is ExtendedTest {
     uint256 public constant MAX_OPERATIONS = 10;
     uint256 public constant MIN_OBJECTIONS_THRESHOLD = 100; // 1%
     uint256 public constant MAX_OBJECTIONS_THRESHOLD = 3000; // 30%
-    uint256 public constant MIN_MOTION_DURATION = 16 hours;
+    uint256 public constant MIN_MOTION_DURATION = 1; // 1 second
 
     address public admin = address(1);
     address public factory = address(2);
@@ -192,7 +192,8 @@ contract LeanTrackTest is ExtendedTest {
             address(0),
             address(timelock),
             address(leanTrack),
-            address(token)
+            address(token),
+            address(this)
         ];
         for (uint i = 0; i < reservedList.length; i++)
              reserved[reservedList[i]] = true;
@@ -1011,6 +1012,8 @@ contract LeanTrackTest is ExtendedTest {
 
     function testCannotObjectToMotionWithZeroVotingBalance(address random) public {
         vm.assume(!reserved[random]);
+        uint256 votingBalanceForObjector = token.balanceOf(random);
+        vm.assume(votingBalanceForObjector == 0);
         // setup
         uint256 motionId;
         (motionId,) = _createMotion(1);
