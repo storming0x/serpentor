@@ -192,7 +192,8 @@ contract LeanTrackTest is ExtendedTest {
             address(0),
             address(timelock),
             address(leanTrack),
-            address(token)
+            address(token),
+            address(this)
         ];
         for (uint i = 0; i < reservedList.length; i++)
              reserved[reservedList[i]] = true;
@@ -1011,6 +1012,8 @@ contract LeanTrackTest is ExtendedTest {
 
     function testCannotObjectToMotionWithZeroVotingBalance(address random) public {
         vm.assume(!reserved[random]);
+        uint256 votingBalanceForObjector = token.balanceOf(random);
+        vm.assume(votingBalanceForObjector == 0);
         // setup
         uint256 motionId;
         (motionId,) = _createMotion(1);
