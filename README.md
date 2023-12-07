@@ -13,7 +13,9 @@ A set of smart contracts tools for governance written in vyper
 ## Contracts
 
 * Timelock.vy - "Vyper implementation of a timelock contract for governance"
+* DualTimelock.vy - "Timelock that can work with two queues with different delay settings"
 * SerpentorBravo.vy - "Vyper implementation of a governance contract for on-chain voting on proposals and execution"
+* LeanTrack.vy - "Implementation for Optimistic on-chain governance system of motions to govern smart contracts"
 
 ## Requirements
 
@@ -76,6 +78,10 @@ ape compile
 ape test
 ```
 
+## Compatibility
+This project aims to be compatible with most governance contracts and best practices.
+This implementation is mainly designed to work with any token implementing COMP token voting weight functions like `getPriorVotes`,  but in most cases minimal changes are required to interact with other smart contracts implementations like OZ voting tokens. 
+
 ## Disclaimer
 
 This is **experimental software** and is provided on an "as is" and "as available" basis **without any warranties**.
@@ -91,5 +97,6 @@ Use at your own risk.
 ## Acknowledgements
 
 - [compound governance](https://github.com/compound-finance/compound-protocol/tree/master/contracts/Governance)
+- [Easy Track](https://github.com/lidofinance/easy-track)
 - [snekmate](https://github.com/pcaversaccio/snekmate)
 - [vyperDeployer](https://github.com/0xKitsune/Foundry-Vyper/blob/main/lib/utils/VyperDeployer.sol)
